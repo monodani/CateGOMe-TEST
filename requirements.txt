@@ -3,6 +3,8 @@ pandas
 Pillow
 google-generativeai
 langchain
+langchain-core
+langchain-community
 langchain-openai
 openai
 faiss-cpu
