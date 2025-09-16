@@ -449,16 +449,11 @@ classification_chain_single = (
     | StrOutputParser()
 )
 
-
-# === 표시용 포맷터: 천단위 콤마 + '원' ===
 def fmt_won(x):
     try:
-        return f"{int(x):,} 원"
+        return f"{int(x):,}원"
     except Exception:
-        try:
-            return f"{int(float(x)):,} 원"
-        except Exception:
-            return "0 원"
+        return "0원"
         
 # ========================================
 # Streamlit UI (심플하게)
@@ -665,25 +660,18 @@ if results is not None:
     if not df_definite.empty:
         st.markdown("### ✅ 명확하게 분류된 품목")
 
-        h = min(44 * (len(df_definite) + 1), 600)
         view_def = df_definite.copy()
-        view_def["수입"] = view_def["수입"].map(fmt_won)
-        view_def["지출"] = view_def["지출"].map(fmt_won)
+        view_def["수입(원)"] = view_def["수입"].apply(fmt_won)
+        view_def["지출(원)"] = view_def["지출"].apply(fmt_won)
+        view_def = view_def[["품목명", "입력코드", "항목명", "신뢰도", "수입(원)", "지출(원)"]]
 
-        # st.dataframe 호출 부분을 수정했습니다.
+        h = min(44 * (len(df_definite) + 1), 600)
+
         st.dataframe(
-            view_def[["품목명", "입력코드", "항목명", "신뢰도", "수입", "지출"]],
-            sty = view_def.style.set_properties(subset=["수입","지출"], **{"text-align":"right"})
-            st.dataframe(sty, use_container_width=True, height=h, hide_index=True)
+            view_def,
             use_container_width=True,
             height=h,
             hide_index=True,
-            column_config={
-                "수입": st.column_config.TextColumn(),
-                "지출": st.column_config.TextColumn(),
-                "입력코드": st.column_config.TextColumn(),
-                "신뢰도": st.column_config.TextColumn(),
-            },
         )
 
 results = st.session_state.get("results")
@@ -693,20 +681,8 @@ if results is not None:
     failed_results     = results["failed_results"]
     
     st.markdown("---")
-    st.markdown("## 📊 분류 결과")
-
-    # --- (1) 명확하게 분류된 품목 ---
-    # if not df_definite.empty:
-        # (명확하게 분류된 품목을 표시하는 코드)
-        # ...
-
-    # --- (2) 애매하게 분류된 품목 ---
-    # (애매한 품목을 표시하는 코드)
-    # ...
-
 
     # --- (3) 입력코드별 요약 보기 (재계산 없이 캐시로부터) ---
-    # 이 부분의 들여쓰기를 상위 if문(if results is not None:)에 맞춰 수정합니다.
     if st.checkbox("입력코드별 요약 보기", key="show_summary"):
         numeric_codes_mask = pd.to_numeric(df_definite['입력코드'], errors='coerce').notna()
         df_summary = df_definite[numeric_codes_mask].copy()
@@ -720,23 +696,17 @@ if results is not None:
             ).reset_index()
 
             view_sum = df_summary_agg.copy()
-            view_sum["수입합계"] = view_sum["수입합계"].map(fmt_won)
-            view_sum["지출합계"] = view_sum["지출합계"].map(fmt_won)
+            view_sum["수입합계(원)"] = view_sum["수입합계"].apply(fmt_won)
+            view_sum["지출합계(원)"] = view_sum["지출합계"].apply(fmt_won)
+            view_sum = view_sum[['입력코드', '항목명', '수입합계(원)', '지출합계(원)', '해당품목명']]
             
             h2 = min(44 * (len(view_sum) + 1), 500)
-
-            sty = view_def.style.set_properties(subset=["수입","지출"], **{"text-align":"right"})
-            st.dataframe(sty, use_container_width=True, height=h, hide_index=True)
             
             st.dataframe(
-                view_sum[['입력코드', '항목명', '수입합계', '지출합계', '해당품목명']],
+                view_sum,
                 use_container_width=True,
                 height=h2,
                 hide_index=True,
-                column_config={
-                    "수입합계": st.column_config.TextColumn(),
-                    "지출합계": st.column_config.TextColumn(),
-                },
             )
             
             # --- (4) 명확한 분류에 대한 상세 근거 ---
