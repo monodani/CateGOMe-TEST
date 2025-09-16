@@ -91,7 +91,7 @@ def initialize_system():
         # LLM 모델도 캐시
         _llm_model = ChatOpenAI(
             model_name=LLM_MODEL,
-            temperature=0.1,
+            temperature=0.3,
             openai_api_key=OPENAI_API_KEY
         )
 
