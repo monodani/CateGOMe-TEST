@@ -48,7 +48,7 @@ uploaded_file = st.file_uploader("여기에 가계부 이미지를 드래그 앤
 
 if uploaded_file is not None:
     # use_container_width 경고 수정
-    st.image(uploaded_file, caption="업로드된 이미지", use_container_width=True)
+    st.image(uploaded_file, caption="업로드된 이미지", use_container_width='stretch')
 
     if st.button("분류시작", type="primary"):
         categorizing_emoji = display_image_or_emoji("assets/emoji/CateGOMe_emoji_categorying.png", "🤓", 40)
