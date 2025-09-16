@@ -7,8 +7,9 @@ from pathlib import Path
 
 # --- 설정값 (Configuration) ---
 # 아래 딕셔너리에 GitHub Raw URL과 로컬 저장 경로를 추가/수정하여 관리합니다.
+# --- 설정값 (Configuration) ---
 DATA_FILES = {
-    # Vectorstores - cases
+    # Vectorstores - cases (파일명 수정: cases_index -> case_index)
     "cases_faiss": {
         "url": "https://raw.githubusercontent.com/monodani/CateGOMe-TEST/main/vectorstores/cases/cases_index.faiss",
         "local_path": "vectorstores/cases/cases_index.faiss"
@@ -76,11 +77,10 @@ DATA_FILES = {
 }
 
 # --- 핵심 기능 (Core Logic) ---
-
 def download_file(url: str, local_path: str):
     """
     주어진 URL에서 파일을 다운로드하여 지정된 로컬 경로에 저장합니다.
-    경로가 존재하지 않으면 자동으로 생성합니다.
+    이미지 파일의 경우 유효성을 검증합니다.
     """
     if not os.path.exists(local_path):
         # 파일이 위치할 디렉토리 생성
@@ -88,9 +88,22 @@ def download_file(url: str, local_path: str):
         try:
             with requests.get(url, stream=True) as r:
                 r.raise_for_status()
+                content = r.content
+                
+                # 이미지 파일인 경우 검증
+                if local_path.endswith(('.png', '.jpg', '.jpeg', '.gif')):
+                    try:
+                        # 이미지 유효성 검증
+                        img = Image.open(io.BytesIO(content))
+                        img.verify()  # 이미지가 유효한지 확인
+                    except Exception as e:
+                        st.error(f"이미지 파일 검증 실패: {local_path} ({e})")
+                        return False
+                
+                # 파일 저장
                 with open(local_path, 'wb') as f:
-                    for chunk in r.iter_content(chunk_size=8192):
-                        f.write(chunk)
+                    f.write(content)
+                    
         except requests.exceptions.RequestException as e:
             st.error(f"파일 다운로드 실패: {local_path} ({e})")
             return False
@@ -120,4 +133,4 @@ def initialize_app_data():
         return local_paths
     else:
         st.error("일부 필수 파일을 다운로드하지 못했습니다. 앱이 정상적으로 동작하지 않을 수 있습니다.")
-        return None
+        return local_paths  # None 대신 부분적으로 성공한 경로들을 반환
