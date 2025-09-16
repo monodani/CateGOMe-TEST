@@ -1,11 +1,12 @@
 streamlit
 google-generativeai
-openai
-langchain
-langchain-community
-langchain-openai
-langchain-core
+openai>=1.0.0
+langchain>=0.1.0
+langchain-community>=0.0.10
+langchain-openai>=0.0.5
+langchain-core>=0.1.0
 pandas
 faiss-cpu
 numpy
 requests
+tabulate
