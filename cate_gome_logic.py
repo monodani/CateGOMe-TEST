@@ -1,5 +1,3 @@
-# /cate_gome_logic.py
-
 import os
 import re
 import json
@@ -132,99 +130,101 @@ def _get_term_info_via_llm(llm: ChatOpenAI, user_query: str, num_related_terms: 
     }}
   ]
 }}
+```
 이제 아래 사용자 입력 쿼리를 처리해라. 다른 말은 절대 하지 말고 JSON만 출력해라. 관련 용어는 {num_related_terms}개 추출해라.
 사용자 입력 쿼리: {user_query}"""
-try:
-res = llm.invoke(prompt)
-text_content = res.content.strip()
-json_match = re.search(r'{.}', text_content, re.DOTALL)
-if not json_match: raise json.JSONDecodeError("No JSON found", text_content, 0)
-data = json.loads(json_match.group(0))
-return data.get("terms", [])
-except Exception as e:
-print(f"ERROR[llm]: Failed to get term info: {e}")
-# 쿼리에서 품목명을 직접 파싱하여 폴백(fallback)
-match = re.search(r"product_name\s=\s*['"['"]]", user_query)
-term = match.group(1) if match else "unknown"
-return [{"term": term, "description": "", "related_terms": []}]
+    
+    try:
+        res = llm.invoke(prompt)
+        text_content = res.content.strip()
+        json_match = re.search(r'\{.*\}', text_content, re.DOTALL)
+        if not json_match: raise json.JSONDecodeError("No JSON found", text_content, 0)
+        data = json.loads(json_match.group(0))
+        return data.get("terms", [])
+    except Exception as e:
+        print(f"ERROR[llm]: Failed to get term info: {e}")
+        # 쿼리에서 품목명을 직접 파싱하여 폴백(fallback)
+        match = re.search(r"product_name\s*=\s*\['([^']+)'\]", user_query)
+        term = match.group(1) if match else "unknown"
+        return [{"term": term, "description": "", "related_terms": []}]
+
 def search_classification_codes(user_query: str, all_docs_from_vs: Dict[str, List[Document]]) -> Dict[str, Any]:
-if not all([_df is not None, _embeddings, _vectorstores, _llm_model]):
-return {"context_docs": [], "error": "시스템이 초기화되지 않았습니다."}
-code
-Code
-extracted_terms_info = _get_term_info_via_llm(_llm_model, user_query, num_related_terms=NUM_RELATED_TERMS)
-all_relevant_docs, seen_docs_page_content = [], set()
+    if not all([_df is not None, _embeddings, _vectorstores, _llm_model]):
+        return {"context_docs": [], "error": "시스템이 초기화되지 않았습니다."}
+    
+    extracted_terms_info = _get_term_info_via_llm(_llm_model, user_query, num_related_terms=NUM_RELATED_TERMS)
+    all_relevant_docs, seen_docs_page_content = [], set()
 
-for item in extracted_terms_info:
-    term = item.get("term", "")
-    if not term: continue
-    
-    terms_to_search = [term] + item.get("related_terms", [])
-    
-    # Keyword Search (CSV)
-    for search_term in terms_to_search:
-        for doc in _keyword_search(_df, search_term):
-            if doc.page_content not in seen_docs_page_content:
-                all_relevant_docs.append(doc)
-                seen_docs_page_content.add(doc.page_content)
-    
-    # Keyword Search (Vectorstores)
-    for vs_name, doc_list in all_docs_from_vs.items():
+    for item in extracted_terms_info:
+        term = item.get("term", "")
+        if not term: continue
+        
+        terms_to_search = [term] + item.get("related_terms", [])
+        
+        # Keyword Search (CSV)
         for search_term in terms_to_search:
-            for doc in _keyword_search_on_docs(doc_list, search_term):
-                new_doc = Document(page_content=f"출처: {vs_name}\n{doc.page_content}", metadata=doc.metadata)
-                if new_doc.page_content not in seen_docs_page_content:
-                    all_relevant_docs.append(new_doc)
-                    seen_docs_page_content.add(new_doc.page_content)
-    
-    # Similarity Search (Vectorstores)
-    description = item.get("description", "")
-    if description:
-        for vs_name, vs in _vectorstores.items():
-            for doc in _similarity_topk_for_term(vs, _embeddings, description, k=SIMILARITY_TOP_K):
-                new_doc = Document(page_content=f"출처: {vs_name}\n{doc.page_content}", metadata=doc.metadata)
-                if new_doc.page_content not in seen_docs_page_content:
-                    all_relevant_docs.append(new_doc)
-                    seen_docs_page_content.add(new_doc.page_content)
+            for doc in _keyword_search(_df, search_term):
+                if doc.page_content not in seen_docs_page_content:
+                    all_relevant_docs.append(doc)
+                    seen_docs_page_content.add(doc.page_content)
+        
+        # Keyword Search (Vectorstores)
+        for vs_name, doc_list in all_docs_from_vs.items():
+            for search_term in terms_to_search:
+                for doc in _keyword_search_on_docs(doc_list, search_term):
+                    new_doc = Document(page_content=f"출처: {vs_name}\n{doc.page_content}", metadata=doc.metadata)
+                    if new_doc.page_content not in seen_docs_page_content:
+                        all_relevant_docs.append(new_doc)
+                        seen_docs_page_content.add(new_doc.page_content)
+        
+        # Similarity Search (Vectorstores)
+        description = item.get("description", "")
+        if description:
+            for vs_name, vs in _vectorstores.items():
+                for doc in _similarity_topk_for_term(vs, _embeddings, description, k=SIMILARITY_TOP_K):
+                    new_doc = Document(page_content=f"출처: {vs_name}\n{doc.page_content}", metadata=doc.metadata)
+                    if new_doc.page_content not in seen_docs_page_content:
+                        all_relevant_docs.append(new_doc)
+                        seen_docs_page_content.add(new_doc.page_content)
 
-return {"context_docs": all_relevant_docs, "extracted_terms_info": extracted_terms_info}
+    return {"context_docs": all_relevant_docs, "extracted_terms_info": extracted_terms_info}
+
 def get_classification_report(image_bytes: bytes, openai_api_key: str, genai_api_key: str) -> str:
-"""
-메인 로직 실행 함수: 이미지 바이트를 입력받아 최종 분류 보고서(Markdown)를 문자열로 반환합니다.
-"""
-# --- 1. Gemini를 사용한 이미지 내역 추출 ---
-try:
-genai.configure(api_key=genai_api_key)
-gemini_model = genai.GenerativeModel(GEMINI_MODEL)
-prompt = """가계부 사진에서 표를 인식해서 각 행의 1) 품목명(= '수입종류 및 지출의 품명과 용도' 열), 2) 수입 금액, 3) 지출 금액을 추출하라.
+    """
+    메인 로직 실행 함수: 이미지 바이트를 입력받아 최종 분류 보고서(Markdown)를 문자열로 반환합니다.
+    """
+    # --- 1. Gemini를 사용한 이미지 내역 추출 ---
+    try:
+        genai.configure(api_key=genai_api_key)
+        gemini_model = genai.GenerativeModel(GEMINI_MODEL)
+        prompt = """가계부 사진에서 표를 인식해서 각 행의 1) 품목명(= '수입종류 및 지출의 품명과 용도' 열), 2) 수입 금액, 3) 지출 금액을 추출하라.
 규칙: 금액의 쉼표(,)는 제거하고 정수로. 값이 비어 있으면 0으로. 제목행·체크박스·빈줄은 제외. 반드시 아래 JSON 스키마로만 출력.
 JSON 스키마: {"items": [{"name": "품목명", "income": 0, "expense": 0}, ...]}"""
-code
-Code
-resp = gemini_model.generate_content(
-        [prompt, {'mime_type': 'image/jpeg', 'data': image_bytes}],
-        generation_config={"response_mime_type": "application/json"}
-    )
-    
-    data = json.loads(resp.text)
-    items = data.get("items", [])
-    if not items:
-        return "### 이미지 분석 결과\n\n이미지에서 가계부 내역을 찾을 수 없습니다. 다른 이미지를 시도해주세요."
+        
+        resp = gemini_model.generate_content(
+            [prompt, {'mime_type': 'image/jpeg', 'data': image_bytes}],
+            generation_config={"response_mime_type": "application/json"}
+        )
+        
+        data = json.loads(resp.text)
+        items = data.get("items", [])
+        if not items:
+            return "### 이미지 분석 결과\n\n이미지에서 가계부 내역을 찾을 수 없습니다. 다른 이미지를 시도해주세요."
 
-    # 후처리 강화
-    product_name_list, income_list, expense_list = [], [], []
-    for item in items:
-        name = str(item.get("name", "")).strip()
-        if name: # 품목명이 있는 경우에만 추가
-            product_name_list.append(name)
-            income_list.append(int(str(item.get("income", 0)).replace(",", "")))
-            expense_list.append(int(str(item.get("expense", 0)).replace(",", "")))
+        # 후처리 강화
+        product_name_list, income_list, expense_list = [], [], []
+        for item in items:
+            name = str(item.get("name", "")).strip()
+            if name: # 품목명이 있는 경우에만 추가
+                product_name_list.append(name)
+                income_list.append(int(str(item.get("income", 0)).replace(",", "")))
+                expense_list.append(int(str(item.get("expense", 0)).replace(",", "")))
 
-except Exception as e:
-    return f"### 이미지 분석 오류\n\n이미지 처리 중 오류가 발생했습니다: {e}"
+    except Exception as e:
+        return f"### 이미지 분석 오류\n\n이미지 처리 중 오류가 발생했습니다: {e}"
 
-# --- 2. 개별 품목 처리 및 결과 수집 ---
-prompt_template_single = PromptTemplate.from_template("""SYSTEM: 당신은 주어진 데이터를 분석하여 가장 적합한 '입력코드'와 '항목명'을 추론하는, 극도로 꼼꼼하고 규칙을 엄수하는 데이터 분류 AI이며, 당신의 이름은 "카테고미(CateGOMe)"입니다. 당신의 답변은 반드시 지정된 JSON 형식이어야 합니다.
+    # --- 2. 개별 품목 처리 및 결과 수집 ---
+    prompt_template_single = PromptTemplate.from_template("""SYSTEM: 당신은 주어진 데이터를 분석하여 가장 적합한 '입력코드'와 '항목명'을 추론하는, 극도로 꼼꼼하고 규칙을 엄수하는 데이터 분류 AI이며, 당신의 이름은 "카테고미(CateGOMe)"입니다. 당신의 답변은 반드시 지정된 JSON 형식이어야 합니다.
 [절대 규칙 1] expense > 0 이면 input_code >= 1000, income > 0 이면 input_code < 1000 입니다.
 [절대 규칙 2] '출처: 조사사례집' 정보는 '출처: 항목분류집' 정보보다 항상 우선합니다.
 [분류 타입] 90% 이상 확신할 수 있으면 'DEFINITE', 후보가 여러 개이거나 정보가 부족하면 'AMBIGUOUS'로 결정하세요. (예: '네이버' -> 서비스가 다양해 모호함)
@@ -233,87 +233,87 @@ prompt_template_single = PromptTemplate.from_template("""SYSTEM: 당신은 주�
 HUMAN: #Question: {question}
 #Context: {context}
 Answer:""")
-code
-Code
-classification_chain_single = ({"question": itemgetter("question"), "context": itemgetter("context")} | prompt_template_single | _llm_model | StrOutputParser())
-
-definite_results, ambiguous_results, failed_results = [], [], []
-all_docs_from_vs = {name: list(vs.docstore._dict.values()) for name, vs in _vectorstores.items()}
-
-for i, product_name_original in enumerate(product_name_list):
-    q_single = f"product_name = ['{product_name_original}'], income = [{income_list[i]}], expense = [{expense_list[i]}]"
-    search_output = search_classification_codes(q_single, all_docs_from_vs)
     
-    try:
-        product_name_corrected = search_output["extracted_terms_info"][0]["term"]
-    except (IndexError, KeyError):
-        product_name_corrected = product_name_original
-    
-    if "error" in search_output or not search_output["context_docs"]:
-        failed_results.append({"품목명": product_name_corrected, "수입": income_list[i], "지출": expense_list[i], "실패 이유": "관련 정보 검색 실패"})
-        continue
+    classification_chain_single = ({"question": itemgetter("question"), "context": itemgetter("context")} | prompt_template_single | _llm_model | StrOutputParser())
 
-    context = "\n\n---\n\n".join([doc.page_content for doc in search_output["context_docs"]]).replace("출처: cases", "출처: 조사사례집").replace("출처: classification", "출처: 항목분류집")
-    final_question = f"product_name = ['{product_name_corrected}'], income = [{income_list[i]}], expense = [{expense_list[i]}]"
-    
-    try:
-        output_json_str = classification_chain_single.invoke({"question": final_question, "context": context})
-        json_match = re.search(r'\{.*\}', output_json_str, re.DOTALL)
-        llm_result = json.loads(json_match.group(0))
+    definite_results, ambiguous_results, failed_results = [], [], []
+    all_docs_from_vs = {name: list(vs.docstore._dict.values()) for name, vs in _vectorstores.items()}
+
+    for i, product_name_original in enumerate(product_name_list):
+        q_single = f"product_name = ['{product_name_original}'], income = [{income_list[i]}], expense = [{expense_list[i]}]"
+        search_output = search_classification_codes(q_single, all_docs_from_vs)
         
-        if llm_result.get("classification_type") == "DEFINITE":
-            res = llm_result.get("result", {})
-            code = str(res.get("input_code", "N/A")).strip()
-            definite_results.append({"품목명": product_name_corrected, "입력코드": code, "항목명": _code_to_name_map.get(code, "항목명 없음"), "수입": income_list[i], "지출": expense_list[i], "신뢰도": res.get("confidence", "N/A"), "추론 이유": res.get("reason", "N/A"), "근거 정보": res.get("evidence", "N/A")})
-        else: # AMBIGUOUS
-            candidates = llm_result.get("candidates", [])
-            for cand in candidates:
-                cand_code = str(cand.get("input_code", "")).strip()
-                cand['항목명'] = _code_to_name_map.get(cand_code, "항목명 없음")
-            ambiguous_results.append({"품목명": product_name_corrected, "수입": income_list[i], "지출": expense_list[i], "모호성 이유": llm_result.get("reason_for_ambiguity", "N/A"), "후보": candidates, "근거 정보": llm_result.get("evidence", "N/A")})
-    except Exception as e:
-        failed_results.append({"품목명": product_name_corrected, "수입": income_list[i], "지출": expense_list[i], "실패 이유": f"LLM 응답 처리 실패: {e}"})
+        try:
+            product_name_corrected = search_output["extracted_terms_info"][0]["term"]
+        except (IndexError, KeyError):
+            product_name_corrected = product_name_original
+        
+        if "error" in search_output or not search_output["context_docs"]:
+            failed_results.append({"품목명": product_name_corrected, "수입": income_list[i], "지출": expense_list[i], "실패 이유": "관련 정보 검색 실패"})
+            continue
 
-# --- 3. 최종 보고서(Markdown) 생성 ---
-report = ["## 📊 카테고미 분류 결과 보고서"]
-# Part 1
-report.append("\n### 1. 명확하게 분류된 품목\n")
-if definite_results:
-    df_definite = pd.DataFrame(definite_results)
-    report.append("#### 품목별 분류 결과")
-    report.append(df_definite[["품목명", "입력코드", "항목명", "신뢰도", "수입", "지출"]].to_markdown(index=False))
+        context = "\n\n---\n\n".join([doc.page_content for doc in search_output["context_docs"]]).replace("출처: cases", "출처: 조사사례집").replace("출처: classification", "출처: 항목분류집")
+        final_question = f"product_name = ['{product_name_corrected}'], income = [{income_list[i]}], expense = [{expense_list[i]}]"
+        
+        try:
+            output_json_str = classification_chain_single.invoke({"question": final_question, "context": context})
+            json_match = re.search(r'\{.*\}', output_json_str, re.DOTALL)
+            llm_result = json.loads(json_match.group(0))
+            
+            if llm_result.get("classification_type") == "DEFINITE":
+                res = llm_result.get("result", {})
+                code = str(res.get("input_code", "N/A")).strip()
+                definite_results.append({"품목명": product_name_corrected, "입력코드": code, "항목명": _code_to_name_map.get(code, "항목명 없음"), "수입": income_list[i], "지출": expense_list[i], "신뢰도": res.get("confidence", "N/A"), "추론 이유": res.get("reason", "N/A"), "근거 정보": res.get("evidence", "N/A")})
+            else: # AMBIGUOUS
+                candidates = llm_result.get("candidates", [])
+                for cand in candidates:
+                    cand_code = str(cand.get("input_code", "")).strip()
+                    cand['항목명'] = _code_to_name_map.get(cand_code, "항목명 없음")
+                ambiguous_results.append({"품목명": product_name_corrected, "수입": income_list[i], "지출": expense_list[i], "모호성 이유": llm_result.get("reason_for_ambiguity", "N/A"), "후보": candidates, "근거 정보": llm_result.get("evidence", "N/A")})
+        except Exception as e:
+            failed_results.append({"품목명": product_name_corrected, "수입": income_list[i], "지출": expense_list[i], "실패 이유": f"LLM 응답 처리 실패: {e}"})
+
+    # --- 3. 최종 보고서(Markdown) 생성 ---
+    report = ["## 📊 카테고미 분류 결과 보고서"]
     
-    df_summary = df_definite[pd.to_numeric(df_definite['입력코드'], errors='coerce').notna()].copy()
-    if not df_summary.empty:
-        df_summary['입력코드'] = df_summary['입력코드'].astype(int)
-        df_summary_agg = df_summary.groupby('입력코드').agg(항목명=('항목명', 'first'), 수입합계=('수입', 'sum'), 지출합계=('지출', 'sum'), 해당품목명=('품목명', lambda x: ', '.join(x))).reset_index()
-        report.append("\n#### 입력코드별 요약 결과")
-        report.append(df_summary_agg.to_markdown(index=False))
-else:
-    report.append("명확하게 분류된 품목이 없습니다.")
+    # Part 1
+    report.append("\n### 1. 명확하게 분류된 품목\n")
+    if definite_results:
+        df_definite = pd.DataFrame(definite_results)
+        report.append("#### 품목별 분류 결과")
+        report.append(df_definite[["품목명", "입력코드", "항목명", "신뢰도", "수입", "지출"]].to_markdown(index=False))
+        
+        df_summary = df_definite[pd.to_numeric(df_definite['입력코드'], errors='coerce').notna()].copy()
+        if not df_summary.empty:
+            df_summary['입력코드'] = df_summary['입력코드'].astype(int)
+            df_summary_agg = df_summary.groupby('입력코드').agg(항목명=('항목명', 'first'), 수입합계=('수입', 'sum'), 지출합계=('지출', 'sum'), 해당품목명=('품목명', lambda x: ', '.join(x))).reset_index()
+            report.append("\n#### 입력코드별 요약 결과")
+            report.append(df_summary_agg.to_markdown(index=False))
+    else:
+        report.append("명확하게 분류된 품목이 없습니다.")
 
-# Part 2
-if ambiguous_results:
-    report.append("\n\n### 2. 사용자의 검토가 필요한 품목\n")
-    report.append("> 아래 품목들은 정보가 부족하여 단일 코드를 확정하지 못했습니다. 제시된 후보와 이유를 확인 후 직접 코드를 선택해주세요.\n")
-    for res in ambiguous_results:
-        report.append(f"---\n**품목명: {res['품목명']}** (수입: {res['수입']:,}원, 지출: {res['지출']:,}원)")
-        report.append(f"**- 검토 필요 이유:** {res['모호성 이유']}")
-        if res['후보']:
-             df_cand = pd.DataFrame(res['후보']).rename(columns={'input_code': '입력코드', 'confidence': '신뢰도', 'reason': '이유'})
-             report.append(df_cand[['입력코드', '항목명', '신뢰도', '이유']].to_markdown(index=False))
+    # Part 2
+    if ambiguous_results:
+        report.append("\n\n### 2. 사용자의 검토가 필요한 품목\n")
+        report.append("> 아래 품목들은 정보가 부족하여 단일 코드를 확정하지 못했습니다. 제시된 후보와 이유를 확인 후 직접 코드를 선택해주세요.\n")
+        for res in ambiguous_results:
+            report.append(f"---\n**품목명: {res['품목명']}** (수입: {res['수입']:,}원, 지출: {res['지출']:,}원)")
+            report.append(f"**- 검토 필요 이유:** {res['모호성 이유']}")
+            if res['후보']:
+                df_cand = pd.DataFrame(res['후보']).rename(columns={'input_code': '입력코드', 'confidence': '신뢰도', 'reason': '이유'})
+                report.append(df_cand[['입력코드', '항목명', '신뢰도', '이유']].to_markdown(index=False))
 
-# Part 3
-if definite_results:
-    report.append("\n\n### 3. 명확한 분류에 대한 상세 근거\n")
-    for res in definite_results:
-        report.append(f"---\n**품목명: {res['품목명']} (선택된 코드: {res['입력코드']})**")
-        report.append(f"**- 추론 이유:** {res['추론 이유']}")
-        report.append(f"**- 핵심 근거:**\n```\n{res['근거 정보']}\n```")
+    # Part 3
+    if definite_results:
+        report.append("\n\n### 3. 명확한 분류에 대한 상세 근거\n")
+        for res in definite_results:
+            report.append(f"---\n**품목명: {res['품목명']} (선택된 코드: {res['입력코드']})**")
+            report.append(f"**- 추론 이유:** {res['추론 이유']}")
+            report.append(f"**- 핵심 근거:**\n```\n{res['근거 정보']}\n```")
 
-# Part 4
-if failed_results:
-    report.append("\n\n### 4. 처리 실패 항목\n")
-    report.append(pd.DataFrame(failed_results).to_markdown(index=False))
+    # Part 4
+    if failed_results:
+        report.append("\n\n### 4. 처리 실패 항목\n")
+        report.append(pd.DataFrame(failed_results).to_markdown(index=False))
 
-return "\n".join(report)
+    return "\n".join(report)
