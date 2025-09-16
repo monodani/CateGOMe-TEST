@@ -1,6 +1,7 @@
 # **app.py** / 사용자 인터페이스와 앱의 전체 흐름을 제어하는 메인 파일
-
 import streamlit as st
+import base64
+import os
 from utils import initialize_app_data
 from cate_gome_logic import initialize_models_and_data, get_classification_report
 
@@ -11,9 +12,26 @@ st.set_page_config(
     layout="wide"
 )
 
+# --- 헬퍼 함수들 ---
+def get_base64_image(image_path):
+    """이미지를 base64 문자열로 변환"""
+    try:
+        if image_path and os.path.exists(image_path):
+            with open(image_path, "rb") as f:
+                return base64.b64encode(f.read()).decode()
+    except:
+        pass
+    return None
+
+def display_image_or_emoji(local_paths, image_key, emoji_fallback, size=30):
+    """이미지 표시 시도, 실패시 이모지 대체"""
+    img_base64 = get_base64_image(local_paths.get(image_key))
+    if img_base64:
+        return f'<img src="data:image/png;base64,{img_base64}" width="{size}">'
+    return emoji_fallback
+
 # --- 앱 데이터 및 모델 초기화 ---
 # utils.py를 통해 파일 다운로드 및 캐싱
-# 성공 시, 다운로드된 파일의 로컬 경로가 담긴 딕셔너리를 반환
 local_paths = initialize_app_data()
 
 # API 키 확인
@@ -22,10 +40,9 @@ genai_api_key = st.secrets.get("GENAI_API_KEY")
 
 if not openai_api_key or not genai_api_key:
     st.error("API 키가 설정되지 않았습니다. Streamlit Secrets에 OPENAI_API_KEY와 GENAI_API_KEY를 설정해주세요.")
-    st.stop() # API 키 없으면 앱 실행 중지
+    st.stop()
 
 # cate_gome_logic.py의 모델 및 데이터 로더 호출
-# 이 과정은 캐시된 리소스 내에서 처리되므로, 모델도 한 번만 로드됩니다.
 if local_paths:
     is_initialized, message = initialize_models_and_data(openai_api_key)
     if not is_initialized:
@@ -35,40 +52,24 @@ else:
     st.error("데이터 파일 초기화에 실패하여 앱을 시작할 수 없습니다.")
     st.stop()
 
-
-# --- UI 구성 ---
-
 # --- UI 구성 ---
 # 1. 헤더 (로고와 소개)
 if local_paths and local_paths.get("logo_main"):
     try:
-        # 이미지 파일 검증 후 표시
         from PIL import Image
         img = Image.open(local_paths["logo_main"])
         st.image(img, width=400)
     except Exception as e:
-        # 로고 로딩 실패 시 텍스트로 대체
-        st.markdown("# 🏠 카테고미(CateGOMe)")
-        # 디버깅용 (필요시 주석 해제)
-        # st.warning(f"로고 이미지 로딩 실패: {e}")
+        st.markdown("# 🐻 카테고미(CateGOMe)")
 else:
-    st.markdown("# 🏠 카테고미(CateGOMe)")
+    st.markdown("# 🐻 카테고미(CateGOMe)")
 
 st.title("가계부 자동 분류 서비스")
 st.markdown("---")
 
-# 이모지는 파일 대신 유니코드 이모지 사용
-st.markdown("안녕하세요! 👋 가계부 이미지를 업로드해주시면 제가 알아서 분류해 드릴게요.")
-
-# 또는 이모지 이미지를 base64로 인코딩하여 사용
-# if local_paths and local_paths.get("emoji_hi"):
-#     try:
-#         import base64
-#         with open(local_paths['emoji_hi'], "rb") as f:
-#             data = base64.b64encode(f.read()).decode()
-#         st.markdown(f"안녕하세요! 가계부 이미지를 업로드해주시면 제가 알아서 분류해 드릴게요. <img src='data:image/png;base64,{data}' width='30'>", unsafe_allow_html=True)
-#     except:
-#         st.markdown("안녕하세요! 👋 가계부 이미지를 업로드해주시면 제가 알아서 분류해 드릴게요.")
+# 인사말 - base64 이미지 또는 이모지 사용
+hi_emoji = display_image_or_emoji(local_paths, "emoji_hi", "👋", 30)
+st.markdown(f"안녕하세요! {hi_emoji} 가계부 이미지를 업로드해주시면 제가 알아서 분류해 드릴게요.", unsafe_allow_html=True)
 
 # 2. 세션 상태 초기화 (결과 로그 저장용)
 if 'results_log' not in st.session_state:
@@ -85,12 +86,15 @@ if uploaded_file is not None:
     st.image(uploaded_file, caption="업로드된 이미지", use_column_width=True)
     
     if st.button("분류시작", type="primary"):
-        # 스피너 (로딩 메시지) 표시
-        spinner_message = "카테고미가 열심히 분류 중이에요... 잠시만 기다려주세요! "
-        if local_paths and local_paths.get("emoji_categorizing"):
-            spinner_message += f"<img src='file://{local_paths['emoji_categorizing']}' width='40'>"
+        # 스피너 메시지 - base64 이미지 또는 이모지 사용
+        categorizing_emoji = display_image_or_emoji(local_paths, "emoji_categorizing", "⏳", 40)
+        spinner_message = f"카테고미가 열심히 분류 중이에요... 잠시만 기다려주세요! {categorizing_emoji}"
         
-        with st.spinner(spinner_message):
+        with st.spinner("카테고미가 열심히 분류 중이에요... 잠시만 기다려주세요! ⏳"):
+            # HTML을 포함한 spinner 메시지는 st.spinner에서 지원하지 않으므로
+            # 별도의 st.markdown으로 표시
+            st.markdown(spinner_message, unsafe_allow_html=True)
+            
             try:
                 # 이미지 파일을 바이트로 변환
                 image_bytes = uploaded_file.getvalue()
@@ -100,9 +104,10 @@ if uploaded_file is not None:
                 
                 # 결과 로그를 세션 상태에 추가 (최신 결과가 위로 오도록)
                 st.session_state.results_log.insert(0, report)
-
+                
             except Exception as e:
-                error_message = f"죄송해요, 처리 중 오류가 발생했어요. <img src='file://{local_paths.get('emoji_sorry', '')}' width='30'>"
+                sorry_emoji = display_image_or_emoji(local_paths, "emoji_sorry", "😔", 30)
+                error_message = f"죄송해요, 처리 중 오류가 발생했어요. {sorry_emoji}"
                 st.error(error_message, icon="🚨")
                 st.error(f"오류 상세 내용: {e}")
 
