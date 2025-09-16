@@ -11,55 +11,53 @@ from pathlib import Path
 DATA_FILES = {
     # Vectorstores - cases
     "cases_faiss": {
-        # <<< 여기가 수정된 부분입니다: 'case_index.faiss' -> 'cases_index.faiss'
         "url": "https://raw.githubusercontent.com/monodani/CateGOMe-TEST/main/vectorstores/cases/cases_index.faiss",
-        "local_path": "vectorstores/cases/cases_index.faiss"
+        "local_path": BASE_DIR / "vectorstores" / "cases" / "cases_index.faiss" # <<< 절대 경로 기준으로 수정
     },
     "cases_pkl": {
-        # <<< 여기가 수정된 부분입니다: 'case_index.pkl' -> 'cases_index.pkl'
         "url": "https://raw.githubusercontent.com/monodani/CateGOMe-TEST/main/vectorstores/cases/cases_index.pkl",
-        "local_path": "vectorstores/cases/cases_index.pkl"
+        "local_path": BASE_DIR / "vectorstores" / "cases" / "cases_index.pkl" # <<< 절대 경로 기준으로 수정
     },
     # Vectorstores - classification
     "classification_faiss": {
         "url": "https://raw.githubusercontent.com/monodani/CateGOMe-TEST/main/vectorstores/classification/classification_index.faiss",
-        "local_path": "vectorstores/classification/classification_index.faiss"
+        "local_path": BASE_DIR / "vectorstores" / "classification" / "classification_index.faiss" # <<< 절대 경로 기준으로 수정
     },
     "classification_pkl": {
         "url": "https://raw.githubusercontent.com/monodani/CateGOMe-TEST/main/vectorstores/classification/classification_index.pkl",
-        "local_path": "vectorstores/classification/classification_index.pkl"
+        "local_path": BASE_DIR / "vectorstores" / "classification" / "classification_index.pkl" # <<< 절대 경로 기준으로 수정
     },
     # Main Data CSV
     "classification_csv": {
         "url": "https://raw.githubusercontent.com/monodani/CateGOMe-TEST/main/data/classification_code.csv",
-        "local_path": "data/classification_code.csv"
+        "local_path": BASE_DIR / "data" / "classification_code.csv" # <<< 절대 경로 기준으로 수정
     },
     # Asset Images
     "logo_main": {
         "url": "https://raw.githubusercontent.com/monodani/CateGOMe-TEST/main/assets/CateGOMe/CateGOMe_kor.png",
-        "local_path": "assets/CateGOMe_kor.png"
+        "local_path": BASE_DIR / "assets" / "CateGOMe_kor.png" # <<< 절대 경로 기준으로 수정
     },
     "emoji_hi": {
         "url": "https://raw.githubusercontent.com/monodani/CateGOMe-TEST/main/assets/emoji/CateGOMe_emoji_hi.png",
-        "local_path": "assets/emoji/CateGOMe_emoji_hi.png"
+        "local_path": BASE_DIR / "assets" / "CateGOMe_emoji_hi.png" # <<< 절대 경로 기준으로 수정
     },
     "emoji_categorizing": {
         "url": "https://raw.githubusercontent.com/monodani/CateGOMe-TEST/main/assets/emoji/CateGOMe_emoji_categorying.png",
-        "local_path": "assets/emoji/CateGOMe_emoji_categorying.png"
+        "local_path": BASE_DIR / "assets" / "CateGOMe_emoji_categorying.png" # <<< 절대 경로 기준으로 수정
     },
     "emoji_sorry": {
         "url": "https://raw.githubusercontent.com/monodani/CateGOMe-TEST/main/assets/emoji/CateGOMe_emoji_sorry.png",
-        "local_path": "assets/emoji/CateGOMe_emoji_sorry.png"
+        "local_path": BASE_DIR / "assets" / "CateGOMe_emoji_sorry.png" # <<< 절대 경로 기준으로 수정
     }
 }
 
 # --- 핵심 기능 (Core Logic) ---
-def download_file(url: str, local_path: str):
+def download_file(url: str, local_path: Path): # local_path 타입을 Path 객체로 명시
     """
     주어진 URL에서 파일을 다운로드하여 지정된 로컬 경로에 저장합니다.
     """
     if not os.path.exists(local_path):
-        Path(local_path).parent.mkdir(parents=True, exist_ok=True)
+        local_path.parent.mkdir(parents=True, exist_ok=True)
         try:
             with requests.get(url, stream=True) as r:
                 r.raise_for_status()
@@ -76,13 +74,12 @@ def initialize_app_data():
     """
     앱 실행에 필요한 모든 데이터 파일을 다운로드합니다.
     """
-    # st.write는 로딩 중에 여러 번 호출될 수 있으므로 st.spinner 외부에서는 제거하는 것이 깔끔합니다.
     local_paths = {}
     all_successful = True
     
     for key, info in DATA_FILES.items():
         if download_file(info["url"], info["local_path"]):
-            local_paths[key] = info["local_path"]
+            local_paths[key] = str(info["local_path"]) # st.image 등을 위해 문자열로 변환하여 저장
         else:
             all_successful = False
             local_paths[key] = None
