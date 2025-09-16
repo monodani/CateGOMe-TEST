@@ -465,59 +465,75 @@ with col2:
     </div>
     """, unsafe_allow_html=True)
 
-# 세션 상태 기본값
-st.session_state.setdefault("ran_once", False)
+# ----------------------------------------------------------
+# 세션 스토리지 기본값
+# ----------------------------------------------------------
+st.session_state.setdefault("results", None)        # 전체 결과 캐시
+st.session_state.setdefault("last_file_name", None) # 업로드 파일 변경 감지
 
-# 이미지 업로드
+# === 업로더(유일) ===
 uploaded_file = st.file_uploader(
     "가계부 이미지를 업로드하세요",
     type=['png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp', 'tiff'],
-    help="드래그 앤 드롭 또는 클릭하여 파일 선택"
+    help="드래그 앤 드롭 또는 클릭하여 파일 선택",
+    key="main_uploader_v2",
 )
 
+# 파일 바뀌면 결과 초기화
+if uploaded_file is not None and st.session_state["last_file_name"] != uploaded_file.name:
+    st.session_state["results"] = None
+    st.session_state["last_file_name"] = uploaded_file.name
 
-if uploaded_file is not None:    
-    if st.session_state.get("last_file_name") != uploaded_file.name:
-        st.session_state["ran_once"] = False
-        st.session_state["last_file_name"] = uploaded_file.name
-    
-    # 1) 버튼은 중앙 컬럼에만, 결과 렌더링은 컬럼 밖에서
+# ----------------------------------------------------------
+# 버튼 (중앙)
+# ----------------------------------------------------------
+if uploaded_file is not None:
     c1, c2, c3 = st.columns([2, 1, 2])
     with c2:
-        run = st.button("🚀 분류 시작", type="primary", use_container_width=True, key="run_btn_v1")  # 🔑 고유 키
-    if run:
-        st.session_state["ran_once"] = True
+        run = st.button("🚀 분류 시작", type="primary", use_container_width=True, key="run_btn_v2")
 
-    # 2) 실행 블록
-    if st.session_state["ran_once"]:
+    # ======================================================
+    # 1) 무거운 파이프라인: 버튼 눌렀을 때만 실행
+    #    실행 결과는 session_state["results"]에 저장
+    # ======================================================
+    if run:
         progress = st.progress(0, "이미지 분석 준비 중...")
 
-        # ---- 기존 파이프라인 그대로 (OCR → 검색 → LLM) ----
+        # --- 여기는 기존 파이프라인 그대로 (OCR → 검색 → LLM) ---
+        #     단, 마지막에 df_definite / ambiguous_results / failed_results만 저장해주면 됩니다.
         img = Image.open(uploaded_file).convert("RGB")
         progress.progress(20, "📸 이미지에서 텍스트 추출 중...")
 
         gemini_model = genai.GenerativeModel("gemini-1.5-flash")
-        prompt = """
-        가계부 사진에서 표를 인식해서 각 행의
-        1) 품목명(= '수입종류 및 지출의 품명과 용도' 열),
-        2) 수입 금액,
-        3) 지출 금액
-        을 추출하라.
-        규칙:
-        - 금액의 쉼표(,)는 제거하고 정수로.
-        - 값이 비어 있으면 0으로.
-        - 제목행·체크박스·빈줄은 제외.
-        - 반드시 아래 JSON 스키마로만 출력.
-        JSON 스키마:
-        { "items": [ {"name": "품목명", "income": 0, "expense": 0} ] }
-        """
 
+        prompt = """
+가계부 사진에서 표를 인식해서 각 행의
+1) 품목명(= '수입종류 및 지출의 품명과 용도' 열),
+2) 수입 금액,
+3) 지출 금액
+을 추출하라.
+
+규칙:
+- 금액의 쉼표(,)는 제거하고 정수로.
+- 값이 비어 있으면 0으로.
+- 제목행·체크박스·빈줄은 제외.
+- 반드시 아래 JSON 스키마로만 출력.
+
+JSON 스키마:
+{
+  "items": [
+    {"name": "품목명", "income": 0, "expense": 0},
+    ...
+  ]
+}
+"""
         img_bytes = uploaded_file.getvalue()
         resp = gemini_model.generate_content(
             [{"text": prompt}, {"inline_data": {"mime_type": uploaded_file.type, "data": img_bytes}}],
             generation_config={"response_mime_type": "application/json"}
         )
-        data = json.loads(resp.text)
+        raw = resp.text
+        data = json.loads(raw)
 
         # 후처리
         items = []
@@ -526,14 +542,14 @@ if uploaded_file is not None:
             def to_int(x):
                 s = str(x).replace(",", "").strip()
                 return int(re.sub(r"[^\d]", "", s)) if re.search(r"\d", s) else 0
-            income  = to_int(it.get("income", 0))
+            income = to_int(it.get("income", 0))
             expense = to_int(it.get("expense", 0))
             if name:
                 items.append({"name": name, "income": income, "expense": expense})
 
         product_name_list = [it["name"] for it in items]
-        income_list       = [it["income"] for it in items]
-        expense_list      = [it["expense"] for it in items]
+        income_list        = [it["income"] for it in items]
+        expense_list       = [it["expense"] for it in items]
 
         progress.progress(30, f"✅ {len(items)}개 품목 발견")
 
@@ -595,58 +611,108 @@ if uploaded_file is not None:
             except Exception as e:
                 failed_results.append({"품목명": pname, "수입": income_list[i], "지출": expense_list[i], "실패 이유": str(e)})
 
+        # ----- DataFrame 생성 및 숫자형으로 강제(⚠️ 제거 핵심) -----
+        df_definite = pd.DataFrame(definite_results)
+        if not df_definite.empty:
+            for col in ["수입", "지출"]:
+                df_definite[col] = pd.to_numeric(df_definite[col], errors="coerce").fillna(0).astype(int)
+
+        # 캐시에 저장 (다음 rerun에서 재사용)
+        st.session_state["results"] = {
+            "df_definite": df_definite,
+            "ambiguous_results": ambiguous_results,
+            "failed_results": failed_results,
+        }
+        
         progress.progress(100, "✅ 분류 완료!")
+
+    # ======================================================
+    # 2) 렌더링: results가 있으면 재계산 없이 그대로 표시
+    #    (체크박스 눌러도 ‘다시 분류’ 안 돌아감)
+    # ======================================================
+    results = st.session_state.get("results")
+    if results is not None:
+        df_definite        = results["df_definite"]
+        ambiguous_results  = results["ambiguous_results"]
+        failed_results     = results["failed_results"]
+        
         st.markdown("---")
         st.markdown("## 📊 분류 결과")
 
-        # === Part 1: 명확 ===
-        if definite_results:
+        # --- (1) 명확하게 분류된 품목 ---
+        if not df_definite.empty:
             st.markdown("### ✅ 명확하게 분류된 품목")
-            df_definite = pd.DataFrame(definite_results)
-            cols = ["품목명", "입력코드", "항목명", "신뢰도", "수입", "지출"]
+
             h = min(44 * (len(df_definite) + 1), 600)
             st.dataframe(
-                df_definite[cols],
-                use_container_width=True, height=h, hide_index=True,
+                df_definite[["품목명", "입력코드", "항목명", "신뢰도", "수입", "지출"]],
+                use_container_width=True,
+                height=h,
+                hide_index=True,
                 column_config={
                     "수입": st.column_config.NumberColumn(format="%,d"),
                     "지출": st.column_config.NumberColumn(format="%,d"),
+                    "입력코드": st.column_config.TextColumn(),
+                    "신뢰도": st.column_config.TextColumn(),
                 },
             )
 
-            if st.checkbox("입력코드별 요약 보기"):
-                numeric = pd.to_numeric(df_definite['입력코드'], errors='coerce').notna()
-                df_summary = df_definite[numeric].copy()
+            # --- (3) 입력코드별 요약 보기 (재계산 없이 캐시로부터) ---
+            if st.checkbox("입력코드별 요약 보기", key="show_summary"):
+                numeric_codes_mask = pd.to_numeric(df_definite['입력코드'], errors='coerce').notna()
+                df_summary = df_definite[numeric_codes_mask].copy()
                 if not df_summary.empty:
                     df_summary['입력코드'] = df_summary['입력코드'].astype(float).astype(int)
-                    df_agg = df_summary.groupby('입력코드').agg(
-                        항목명=('항목명','first'),
-                        수입합계=('수입','sum'),
-                        지출합계=('지출','sum'),
-                        해당품목명=('품목명', lambda x: ', '.join(x)),
+                    df_summary_agg = df_summary.groupby('입력코드').agg(
+                        항목명=('항목명', 'first'),
+                        수입합계=('수입', 'sum'),
+                        지출합계=('지출', 'sum'),
+                        해당품목명=('품목명', lambda x: ', '.join(x))
                     ).reset_index()
-                    h2 = min(44 * (len(df_agg) + 1), 500)
+                    h2 = min(44 * (len(df_summary_agg) + 1), 500)
                     st.dataframe(
-                        df_agg[['입력코드','항목명','수입합계','지출합계','해당품목명']],
-                        use_container_width=True, height=h2, hide_index=True,
+                        df_summary_agg[['입력코드', '항목명', '수입합계', '지출합계', '해당품목명']],
+                        use_container_width=True,
+                        height=h2,
+                        hide_index=True,
                         column_config={
                             "수입합계": st.column_config.NumberColumn(format="%,d"),
                             "지출합계": st.column_config.NumberColumn(format="%,d"),
                         },
                     )
 
-        # === Part 2: 검토 필요 ===
+            # --- (4) 명확한 분류에 대한 상세 근거 ---
+            with st.expander("🔎 명확한 분류에 대한 상세 근거", expanded=False):
+                for row in df_definite.to_dict(orient="records"):
+                    st.markdown(
+                        f"**품목명: {row['품목명']} (선택된 코드: {row['입력코드']}, "
+                        f"항목명: {row['항목명']}, 신뢰도: {row['신뢰도']})**"
+                    )
+                    if row.get("추론 이유"):
+                        st.write(f"**- 추론 이유:** {row['추론 이유']}")
+                    if row.get("근거 정보"):
+                        st.write("**- 핵심 근거:**")
+                        st.code(row["근거 정보"])
+                    st.markdown("---")
+
+        # --- (2) 사용자 검토가 필요한 품목 (컬럼명 한글화) ---
         if ambiguous_results:
             st.markdown("### ⚠️ 사용자 검토가 필요한 품목")
             st.info("아래 품목들은 정보가 부족하여 단일 코드를 확정하지 못했습니다.")
-            for r in ambiguous_results:
-                with st.expander(f"📌 {r['품목명']} (수입: {r['수입']:,}, 지출: {r['지출']:,})"):
-                    st.write(f"**검토 필요 이유:** {r['모호성 이유']}")
-                    cand = pd.DataFrame(r['후보'])
-                    h3 = min(44 * (len(cand) + 1), 400)
-                    st.dataframe(cand, use_container_width=True, height=h3, hide_index=True)
+            for result in ambiguous_results:
+                with st.expander(f"📌 {result['품목명']} (수입: {result['수입']:,}, 지출: {result['지출']:,})"):
+                    st.write(f"**검토 필요 이유:** {result['모호성 이유']}")
+                    candidates_df = pd.DataFrame(result['후보']).rename(columns={
+                        "input_code": "입력코드",
+                        "confidence": "신뢰도",
+                        "reason": "근거 정보",
+                    })
+                    # 표시 컬럼 순서 고정
+                    view_cols = [c for c in ["입력코드", "항목명", "신뢰도", "근거 정보"] if c in candidates_df.columns]
+                    h3 = min(44 * (len(candidates_df) + 1), 400)
+                    st.dataframe(candidates_df[view_cols], use_container_width=True, height=h3, hide_index=True)
 
-        # === Part 3: 실패 ===
+        # (옵션) 실패 항목
         if failed_results:
             with st.expander("❌ 처리 실패 항목"):
                 df_failed = pd.DataFrame(failed_results)
