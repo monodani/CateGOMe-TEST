@@ -9,7 +9,7 @@ from pathlib import Path
 # 아래 딕셔너리에 GitHub Raw URL과 로컬 저장 경로를 추가/수정하여 관리합니다.
 # --- 설정값 (Configuration) ---
 DATA_FILES = {
-    # Vectorstores - cases (파일명 수정: cases_index -> case_index)
+    # Vectorstores - cases
     "cases_faiss": {
         "url": "https://raw.githubusercontent.com/monodani/CateGOMe-TEST/main/vectorstores/cases/cases_index.faiss",
         "local_path": "vectorstores/cases/cases_index.faiss"
