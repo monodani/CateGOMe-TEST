@@ -648,45 +648,41 @@ JSON 스키마:
         
         progress.progress(100, "✅ 분류 완료!")
 
-    # ======================================================
-    # 2) 렌더링: results가 있으면 재계산 없이 그대로 표시
-    #    (체크박스 눌러도 ‘다시 분류’ 안 돌아감)
-    # ======================================================
-    results = st.session_state.get("results")
-    if results is not None:
-        df_definite        = results["df_definite"]
-        ambiguous_results  = results["ambiguous_results"]
-        failed_results     = results["failed_results"]
-        
-        st.markdown("---")
-        st.markdown("## 📊 분류 결과")
+# ======================================================
+# 2) 렌더링: results가 있으면 재계산 없이 그대로 표시
+#    (체크박스 눌러도 ‘다시 분류’ 안 돌아감)
+# ======================================================
+results = st.session_state.get("results")
+if results is not None:
+    df_definite        = results["df_definite"]
+    ambiguous_results  = results["ambiguous_results"]
+    failed_results     = results["failed_results"]
+    
+    st.markdown("---")
+    st.markdown("## 📊 분류 결과")
 
-        # --- (1) 명확하게 분류된 품목 ---
-        if not df_definite.empty:
-            st.markdown("### ✅ 명확하게 분류된 품목")
+    # --- (1) 명확하게 분류된 품목 ---
+    if not df_definite.empty:
+        st.markdown("### ✅ 명확하게 분류된 품목")
 
-            h = min(44 * (len(df_definite) + 1), 600)
-            view_def = df_definite.copy()
-            view_def["수입"] = view_def["수입"].map(fmt_won)
-            view_def["지출"] = view_def["지출"].map(fmt_won)
+        h = min(44 * (len(df_definite) + 1), 600)
+        view_def = df_definite.copy()
+        view_def["수입"] = view_def["수입"].map(fmt_won)
+        view_def["지출"] = view_def["지출"].map(fmt_won)
 
-            st.dataframe(
-                view_def[["품목명", "입력코드", "항목명", "신뢰도", "수입", "지출"]],
-                    use_container_width=True,
-                    height=h,
-                    hide_index=True,
-                    column_config={
-                df_definite[["품목명", "입력코드", "항목명", "신뢰도", "수입", "지출"]],
-                use_container_width=True,
-                height=h,
-                hide_index=True,
-                column_config={
-                    "수입": st.column_config.TextColumn(),
-                    "지출": st.column_config.TextColumn(),
-                    "입력코드": st.column_config.TextColumn(),
-                    "신뢰도": st.column_config.TextColumn(),
-                },
-            )
+        # st.dataframe 호출 부분을 수정했습니다.
+        st.dataframe(
+            view_def[["품목명", "입력코드", "항목명", "신뢰도", "수입", "지출"]],
+            use_container_width=True,
+            height=h,
+            hide_index=True,
+            column_config={
+                "수입": st.column_config.TextColumn(),
+                "지출": st.column_config.TextColumn(),
+                "입력코드": st.column_config.TextColumn(),
+                "신뢰도": st.column_config.TextColumn(),
+            },
+        )
 
             # --- (3) 입력코드별 요약 보기 (재계산 없이 캐시로부터) ---
             if st.checkbox("입력코드별 요약 보기", key="show_summary"):
