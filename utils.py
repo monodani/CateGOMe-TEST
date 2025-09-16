@@ -10,12 +10,12 @@ from pathlib import Path
 DATA_FILES = {
     # Vectorstores - cases
     "cases_faiss": {
-        "url": "https://raw.githubusercontent.com/monodani/CateGOMe-TEST/main/vectorstores/cases/case_index.faiss",
-        "local_path": "vectorstores/cases/case_index.faiss"
+        "url": "https://raw.githubusercontent.com/monodani/CateGOMe-TEST/main/vectorstores/cases/cases_index.faiss",
+        "local_path": "vectorstores/cases/cases_index.faiss"
     },
     "cases_pkl": {
-        "url": "https://raw.githubusercontent.com/monodani/CateGOMe-TEST/main/vectorstores/cases/case_index.pkl",
-        "local_path": "vectorstores/cases/case_index.pkl"
+        "url": "https://raw.githubusercontent.com/monodani/CateGOMe-TEST/main/vectorstores/cases/cases_index.pkl",
+        "local_path": "vectorstores/cases/cases_index.pkl"
     },
     # Vectorstores - classification
     "classification_faiss": {
