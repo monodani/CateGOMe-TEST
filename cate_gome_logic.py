@@ -20,14 +20,11 @@ import google.generativeai as genai
 # 이 부분의 값을 변경하여 모델의 동작을 파인튜닝할 수 있습니다.
 
 # 1. AI 모델 설정
-# OpenAI 임베딩 모델: 문서와 텍스트를 벡터로 변환하는 데 사용됩니다.
 EMBED_MODEL = "text-embedding-3-large"
-# OpenAI LLM 모델: 최종 답변 생성 및 키워드 추출에 사용됩니다.
 LLM_MODEL = "gpt-4o"
-# Google Gemini 모델: 이미지에서 텍스트(가계부 내역)를 추출하는 데 사용됩니다.
 GEMINI_MODEL = "gemini-1.5-flash"
 
-# 2. 벡터스토어 및 데이터 경로 설정 (utils.py에서 다운로드한 경로)
+# 2. 벡터스토어 및 데이터 경로 설정
 VECTORSTORE_DIR_CASES = "vectorstores/cases"
 INDEX_NAME_CASES = "case_index"
 VECTORSTORE_DIR_CLASSIFICATION = "vectorstores/classification"
@@ -35,13 +32,10 @@ INDEX_NAME_CLASSIFICATION = "classification_index"
 CSV_PATH = "data/classification_code.csv"
 
 # 3. 검색 알고리즘 파라미터
-# 각 품목에 대해 LLM이 생성/추출할 관련 용어의 최대 개수
 NUM_RELATED_TERMS = 3
-# 벡터 유사도 검색 시 가져올 상위 결과의 개수
 SIMILARITY_TOP_K = 3
 
 # --- 전역 변수 및 초기화 ---
-# 이 변수들은 앱 초기화 시 한 번만 로드되어 메모리에 캐시됩니다.
 _embeddings = None
 _vectorstores = None
 _df = None
@@ -51,15 +45,12 @@ _code_to_name_map = None
 def initialize_models_and_data(openai_api_key: str):
     """
     AI 모델, 벡터스토어, 데이터프레임 등 핵심 구성요소를 초기화하고 전역 변수에 할당합니다.
-    이 함수는 메인 앱에서 한 번만 호출됩니다.
     """
     global _embeddings, _vectorstores, _df, _llm_model, _code_to_name_map
     
     try:
-        # OpenAI 임베딩 모델 초기화
         _embeddings = OpenAIEmbeddings(model=EMBED_MODEL, openai_api_key=openai_api_key)
 
-        # 두 개의 벡터스토어 로드
         vs_cases = FAISS.load_local(
             folder_path=VECTORSTORE_DIR_CASES,
             embeddings=_embeddings,
@@ -74,33 +65,20 @@ def initialize_models_and_data(openai_api_key: str):
         )
         _vectorstores = {"cases": vs_cases, "classification": vs_classification}
 
-        # CSV 데이터 로드 및 전처리
         _df = pd.read_csv(CSV_PATH, encoding='utf-8')
         _df = _df.reset_index(drop=False).rename(columns={"index": "_rowid"})
         
-        # 입력코드-항목명 맵 생성 (빠른 조회를 위함)
         _df['입력코드_str'] = _df['입력코드'].astype(str).str.replace(r'\.0$', '', regex=True)
         _code_to_name_map = pd.Series(_df.항목명.values, index=_df.입력코드_str).to_dict()
 
-        # OpenAI LLM 모델 초기화
         _llm_model = ChatOpenAI(model_name=LLM_MODEL, temperature=0.1, openai_api_key=openai_api_key)
 
         return True, "초기화 성공"
-
     except Exception as e:
         return False, f"초기화 실패: {e}"
 
-# --- 제공해주신 핵심 로직 (함수 형태로 재구성) ---
-# (주석 추가 및 일부 로직을 명확하게 수정)
+# --- 헬퍼 함수들 (Helper Functions) ---
 
-# ... (제공해주신 _short_doc_from_row, _keyword_search 등의 헬퍼 함수들 위치) ...
-# (코드가 너무 길어 생략. 원본 코드의 헬퍼 함수들을 이 자리에 그대로 붙여넣으면 됩니다.)
-# IMPORTANT: 아래는 제공된 코드의 핵심 로직을 포함해야 합니다.
-# _short_doc_from_row, _keyword_search, _keyword_search_on_docs,
-# _similarity_topk_for_term, _get_term_info_via_llm, 
-# 그리고 search_classification_codes 함수와 classification_chain_single 체인 정의
-
-# (편의상 제공된 코드 전체를 아래에 포함시켰습니다. 실제로는 모듈화할 수 있습니다.)
 def _short_doc_from_row(row: pd.Series) -> Document:
     source = row.get('출처', '항목분류집')
     source_info = f"출처: {source}\n"
@@ -116,6 +94,7 @@ def _keyword_search(df: pd.DataFrame, term: str) -> List[Document]:
     df_copy = df.copy()
     for c in REQUIRED_COLS:
         if c in df_copy.columns: df_copy[c] = df_copy[c].astype(str)
+    
     mask = (
         df_copy["항목분류내용"].str.contains(term, case=False, na=False) |
         df_copy["항목명"].str.contains(term, case=False, na=False) |
@@ -153,35 +132,42 @@ def _get_term_info_via_llm(llm: ChatOpenAI, user_query: str, num_related_terms: 
     }}
   ]
 }}
-
 이제 아래 사용자 입력 쿼리를 처리해라. 다른 말은 절대 하지 말고 JSON만 출력해라. 관련 용어는 {num_related_terms}개 추출해라.
 사용자 입력 쿼리: {user_query}"""
 try:
 res = llm.invoke(prompt)
 text_content = res.content.strip()
-json_match = re.search(r'{.*}', text_content, re.DOTALL)
+json_match = re.search(r'{.}', text_content, re.DOTALL)
 if not json_match: raise json.JSONDecodeError("No JSON found", text_content, 0)
 data = json.loads(json_match.group(0))
 return data.get("terms", [])
 except Exception as e:
 print(f"ERROR[llm]: Failed to get term info: {e}")
-return [{"term": user_query, "description": "", "related_terms": []}]
+# 쿼리에서 품목명을 직접 파싱하여 폴백(fallback)
+match = re.search(r"product_name\s=\s*['"['"]]", user_query)
+term = match.group(1) if match else "unknown"
+return [{"term": term, "description": "", "related_terms": []}]
 def search_classification_codes(user_query: str, all_docs_from_vs: Dict[str, List[Document]]) -> Dict[str, Any]:
 if not all([_df is not None, _embeddings, _vectorstores, _llm_model]):
 return {"context_docs": [], "error": "시스템이 초기화되지 않았습니다."}
-
+code
+Code
 extracted_terms_info = _get_term_info_via_llm(_llm_model, user_query, num_related_terms=NUM_RELATED_TERMS)
 all_relevant_docs, seen_docs_page_content = [], set()
 
 for item in extracted_terms_info:
-    term = item["term"]
+    term = item.get("term", "")
+    if not term: continue
+    
     terms_to_search = [term] + item.get("related_terms", [])
+    
     # Keyword Search (CSV)
     for search_term in terms_to_search:
         for doc in _keyword_search(_df, search_term):
             if doc.page_content not in seen_docs_page_content:
                 all_relevant_docs.append(doc)
                 seen_docs_page_content.add(doc.page_content)
+    
     # Keyword Search (Vectorstores)
     for vs_name, doc_list in all_docs_from_vs.items():
         for search_term in terms_to_search:
@@ -190,17 +176,18 @@ for item in extracted_terms_info:
                 if new_doc.page_content not in seen_docs_page_content:
                     all_relevant_docs.append(new_doc)
                     seen_docs_page_content.add(new_doc.page_content)
+    
     # Similarity Search (Vectorstores)
-    if item["description"]:
+    description = item.get("description", "")
+    if description:
         for vs_name, vs in _vectorstores.items():
-            for doc in _similarity_topk_for_term(vs, _embeddings, item["description"], k=SIMILARITY_TOP_K):
+            for doc in _similarity_topk_for_term(vs, _embeddings, description, k=SIMILARITY_TOP_K):
                 new_doc = Document(page_content=f"출처: {vs_name}\n{doc.page_content}", metadata=doc.metadata)
                 if new_doc.page_content not in seen_docs_page_content:
                     all_relevant_docs.append(new_doc)
                     seen_docs_page_content.add(new_doc.page_content)
 
 return {"context_docs": all_relevant_docs, "extracted_terms_info": extracted_terms_info}
-
 def get_classification_report(image_bytes: bytes, openai_api_key: str, genai_api_key: str) -> str:
 """
 메인 로직 실행 함수: 이미지 바이트를 입력받아 최종 분류 보고서(Markdown)를 문자열로 반환합니다.
@@ -212,32 +199,42 @@ gemini_model = genai.GenerativeModel(GEMINI_MODEL)
 prompt = """가계부 사진에서 표를 인식해서 각 행의 1) 품목명(= '수입종류 및 지출의 품명과 용도' 열), 2) 수입 금액, 3) 지출 금액을 추출하라.
 규칙: 금액의 쉼표(,)는 제거하고 정수로. 값이 비어 있으면 0으로. 제목행·체크박스·빈줄은 제외. 반드시 아래 JSON 스키마로만 출력.
 JSON 스키마: {"items": [{"name": "품목명", "income": 0, "expense": 0}, ...]}"""
-
-    resp = gemini_model.generate_content([prompt, {'mime_type': 'image/jpeg', 'data': image_bytes}],
-                                       generation_config={"response_mime_type": "application/json"})
+code
+Code
+resp = gemini_model.generate_content(
+        [prompt, {'mime_type': 'image/jpeg', 'data': image_bytes}],
+        generation_config={"response_mime_type": "application/json"}
+    )
     
     data = json.loads(resp.text)
     items = data.get("items", [])
     if not items:
         return "### 이미지 분석 결과\n\n이미지에서 가계부 내역을 찾을 수 없습니다. 다른 이미지를 시도해주세요."
 
-    product_name_list = [str(it.get("name","")).strip() for it in items]
-    income_list = [int(str(it.get("income", 0)).replace(",", "")) for it in items]
-    expense_list = [int(str(it.get("expense", 0)).replace(",", "")) for it in items]
+    # 후처리 강화
+    product_name_list, income_list, expense_list = [], [], []
+    for item in items:
+        name = str(item.get("name", "")).strip()
+        if name: # 품목명이 있는 경우에만 추가
+            product_name_list.append(name)
+            income_list.append(int(str(item.get("income", 0)).replace(",", "")))
+            expense_list.append(int(str(item.get("expense", 0)).replace(",", "")))
 
 except Exception as e:
     return f"### 이미지 분석 오류\n\n이미지 처리 중 오류가 발생했습니다: {e}"
 
 # --- 2. 개별 품목 처리 및 결과 수집 ---
 prompt_template_single = PromptTemplate.from_template("""SYSTEM: 당신은 주어진 데이터를 분석하여 가장 적합한 '입력코드'와 '항목명'을 추론하는, 극도로 꼼꼼하고 규칙을 엄수하는 데이터 분류 AI이며, 당신의 이름은 "카테고미(CateGOMe)"입니다. 당신의 답변은 반드시 지정된 JSON 형식이어야 합니다.
-
 [절대 규칙 1] expense > 0 이면 input_code >= 1000, income > 0 이면 input_code < 1000 입니다.
 [절대 규칙 2] '출처: 조사사례집' 정보는 '출처: 항목분류집' 정보보다 항상 우선합니다.
 [분류 타입] 90% 이상 확신할 수 있으면 'DEFINITE', 후보가 여러 개이거나 정보가 부족하면 'AMBIGUOUS'로 결정하세요. (예: '네이버' -> 서비스가 다양해 모호함)
 [출력 형식] 다른 설명 없이 'DEFINITE' 또는 'AMBIGUOUS' 형식의 JSON으로만 응답하세요.
 (자세한 프롬프트 내용은 원본을 따르되, 간결하게 요약)
-HUMAN: #Question: {question}\n#Context: {context}\nAnswer:""")
-
+HUMAN: #Question: {question}
+#Context: {context}
+Answer:""")
+code
+Code
 classification_chain_single = ({"question": itemgetter("question"), "context": itemgetter("context")} | prompt_template_single | _llm_model | StrOutputParser())
 
 definite_results, ambiguous_results, failed_results = [], [], []
@@ -269,16 +266,15 @@ for i, product_name_original in enumerate(product_name_list):
             code = str(res.get("input_code", "N/A")).strip()
             definite_results.append({"품목명": product_name_corrected, "입력코드": code, "항목명": _code_to_name_map.get(code, "항목명 없음"), "수입": income_list[i], "지출": expense_list[i], "신뢰도": res.get("confidence", "N/A"), "추론 이유": res.get("reason", "N/A"), "근거 정보": res.get("evidence", "N/A")})
         else: # AMBIGUOUS
-            for cand in llm_result.get("candidates", []):
+            candidates = llm_result.get("candidates", [])
+            for cand in candidates:
                 cand_code = str(cand.get("input_code", "")).strip()
                 cand['항목명'] = _code_to_name_map.get(cand_code, "항목명 없음")
-            ambiguous_results.append({"품목명": product_name_corrected, "수입": income_list[i], "지출": expense_list[i], "모호성 이유": llm_result.get("reason_for_ambiguity", "N/A"), "후보": llm_result.get("candidates", []), "근거 정보": llm_result.get("evidence", "N/A")})
+            ambiguous_results.append({"품목명": product_name_corrected, "수입": income_list[i], "지출": expense_list[i], "모호성 이유": llm_result.get("reason_for_ambiguity", "N/A"), "후보": candidates, "근거 정보": llm_result.get("evidence", "N/A")})
     except Exception as e:
         failed_results.append({"품목명": product_name_corrected, "수입": income_list[i], "지출": expense_list[i], "실패 이유": f"LLM 응답 처리 실패: {e}"})
 
 # --- 3. 최종 보고서(Markdown) 생성 ---
-# ... (제공해주신 보고서 생성 로직을 여기에 구현) ...
-# (코드가 너무 길어 생략. 원본 코드의 보고서 생성 부분을 이 자리에 그대로 붙여넣으면 됩니다.)
 report = ["## 📊 카테고미 분류 결과 보고서"]
 # Part 1
 report.append("\n### 1. 명확하게 분류된 품목\n")
