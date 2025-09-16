@@ -38,13 +38,37 @@ else:
 
 # --- UI 구성 ---
 
+# --- UI 구성 ---
 # 1. 헤더 (로고와 소개)
 if local_paths and local_paths.get("logo_main"):
-    st.image(local_paths["logo_main"], width=400)
+    try:
+        # 이미지 파일 검증 후 표시
+        from PIL import Image
+        img = Image.open(local_paths["logo_main"])
+        st.image(img, width=400)
+    except Exception as e:
+        # 로고 로딩 실패 시 텍스트로 대체
+        st.markdown("# 🏠 카테고미(CateGOMe)")
+        # 디버깅용 (필요시 주석 해제)
+        # st.warning(f"로고 이미지 로딩 실패: {e}")
+else:
+    st.markdown("# 🏠 카테고미(CateGOMe)")
+
 st.title("가계부 자동 분류 서비스")
 st.markdown("---")
-if local_paths and local_paths.get("emoji_hi"):
-    st.markdown(f"안녕하세요! 가계부 이미지를 업로드해주시면 제가 알아서 분류해 드릴게요. <img src='file://{local_paths['emoji_hi']}' width='30'>", unsafe_allow_html=True)
+
+# 이모지는 파일 대신 유니코드 이모지 사용
+st.markdown("안녕하세요! 👋 가계부 이미지를 업로드해주시면 제가 알아서 분류해 드릴게요.")
+
+# 또는 이모지 이미지를 base64로 인코딩하여 사용
+# if local_paths and local_paths.get("emoji_hi"):
+#     try:
+#         import base64
+#         with open(local_paths['emoji_hi'], "rb") as f:
+#             data = base64.b64encode(f.read()).decode()
+#         st.markdown(f"안녕하세요! 가계부 이미지를 업로드해주시면 제가 알아서 분류해 드릴게요. <img src='data:image/png;base64,{data}' width='30'>", unsafe_allow_html=True)
+#     except:
+#         st.markdown("안녕하세요! 👋 가계부 이미지를 업로드해주시면 제가 알아서 분류해 드릴게요.")
 
 # 2. 세션 상태 초기화 (결과 로그 저장용)
 if 'results_log' not in st.session_state:
