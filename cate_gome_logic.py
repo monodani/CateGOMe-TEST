@@ -95,7 +95,7 @@ def _keyword_search(df: pd.DataFrame, term: str) -> List[Document]:
     
     mask = (
         df_copy["항목분류내용"].str.contains(term, cases=False, na=False) |
-        df_copy["항목명"].str.contains(term, cases=False, na=False) |
+        df_copy["항목명"].str.contains(term, case=False, na=False) |
         df_copy["포함항목"].str.contains(term, cases=False, na=False) |
         df_copy["제외항목"].str.contains(term, cases=False, na=False)
     )
