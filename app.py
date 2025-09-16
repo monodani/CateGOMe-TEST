@@ -473,10 +473,11 @@ uploaded_file = st.file_uploader(
 )
 
 # 분류 시작 버튼
-if uploaded_file is not None:
-    col1, col2, col3 = st.columns([2, 1, 2])
+if uploaded_file is not None and (run or st.session_state.get("ran_once")):
+    if run:
+        st.session_state["ran_once"] = True
     with col2:
-        if st.button("🚀 분류 시작", type="primary", use_container_width=True):
+        run = st.button("🚀 분류 시작", type="primary", use_container_width=True)
             
             progress = st.progress(0, "이미지 분석 준비 중...")
             
@@ -637,39 +638,63 @@ if uploaded_file is not None:
             if definite_results:
                 st.markdown("### ✅ 명확하게 분류된 품목")
                 df_definite = pd.DataFrame(definite_results)
-                st.dataframe(df_definite[["품목명", "입력코드", "항목명", "신뢰도", "수입", "지출"]], use_container_width=True)
+                cols = ["품목명", "입력코드", "항목명", "신뢰도", "수입", "지출"]
 
-                # 입력코드별 요약
-                if st.checkbox("입력코드별 요약 보기"):
-                    numeric_codes_mask = pd.to_numeric(df_definite['입력코드'], errors='coerce').notna()
-                    df_summary = df_definite[numeric_codes_mask].copy()
+                # 행수 기준으로 표 높이 동적 설정 (최대 600px)
+                h = min(44 * (len(df_definite) + 1), 600)
 
-                    if not df_summary.empty:
-                        df_summary['입력코드'] = df_summary['입력코드'].astype(float).astype(int)
-                        df_summary_agg = df_summary.groupby('입력코드').agg(
-                            항목명=('항목명', 'first'),
-                            수입합계=('수입', 'sum'),
-                            지출합계=('지출', 'sum'),
-                            해당품목명=('품목명', lambda x: ', '.join(x))
-                        ).reset_index()
-                        st.dataframe(df_summary_agg[['입력코드', '항목명', '수입합계', '지출합계', '해당품목명']], use_container_width=True)
+        st.dataframe(
+            df_definite[cols],
+            use_container_width=True,
+            height=h,
+            hide_index=True,
+            column_config={
+                "수입": st.column_config.NumberColumn(format="%,d"),
+                "지출": st.column_config.NumberColumn(format="%,d"),
+                "입력코드": st.column_config.TextColumn(),
+                "신뢰도": st.column_config.TextColumn(),
+            },
+        )
 
-            # --- Part 2: 사용자의 검토가 필요한 품목 ---
-            if ambiguous_results:
-                st.markdown("### ⚠️ 사용자 검토가 필요한 품목")
-                st.info("아래 품목들은 정보가 부족하여 단일 코드를 확정하지 못했습니다.")
+        if st.checkbox("입력코드별 요약 보기"):
+            numeric_codes_mask = pd.to_numeric(df_definite['입력코드'], errors='coerce').notna()
+            df_summary = df_definite[numeric_codes_mask].copy()
+            if not df_summary.empty:
+                df_summary['입력코드'] = df_summary['입력코드'].astype(float).astype(int)
+                df_summary_agg = df_summary.groupby('입력코드').agg(
+                    항목명=('항목명', 'first'),
+                    수입합계=('수입', 'sum'),
+                    지출합계=('지출', 'sum'),
+                    해당품목명=('품목명', lambda x: ', '.join(x)),
+                ).reset_index()
+
+                h2 = min(44 * (len(df_summary_agg) + 1), 500)
                 
-                for result in ambiguous_results:
-                    with st.expander(f"📌 {result['품목명']} (수입: {result['수입']:,}, 지출: {result['지출']:,})"):
-                        st.write(f"**검토 필요 이유:** {result['모호성 이유']}")
-                        st.write("**추천 후보:**")
-                        candidates_df = pd.DataFrame(result['후보'])
-                        st.dataframe(candidates_df, use_container_width=True)
+                st.dataframe(
+                    df_summary_agg[['입력코드', '항목명', '수입합계', '지출합계', '해당품목명']],
+                    use_container_width=True,
+                    height=h2,
+                    hide_index=True,
+                    column_config={
+                        "수입합계": st.column_config.NumberColumn(format="%,d"),
+                        "지출합계": st.column_config.NumberColumn(format="%,d"),
+                    },
+                )
 
-            # --- Part 3: 처리 실패 항목 ---
-            if failed_results:
-                with st.expander("❌ 처리 실패 항목"):
-                    df_failed = pd.DataFrame(failed_results)
-                    st.dataframe(df_failed, use_container_width=True)
-            
-            progress.empty()
+    # === Part 2: 사용자 검토가 필요한 품목 ===
+    if ambiguous_results:
+        st.markdown("### ⚠️ 사용자 검토가 필요한 품목")
+        st.info("아래 품목들은 정보가 부족하여 단일 코드를 확정하지 못했습니다.")
+        for result in ambiguous_results:
+            with st.expander(f"📌 {result['품목명']} (수입: {result['수입']:,}, 지출: {result['지출']:,})"):
+                st.write(f"**검토 필요 이유:** {result['모호성 이유']}")
+                candidates_df = pd.DataFrame(result['후보'])
+                h3 = min(44 * (len(candidates_df) + 1), 400)
+                st.dataframe(candidates_df, use_container_width=True, height=h3, hide_index=True)
+
+    # === Part 3: 처리 실패 ===
+    if failed_results:
+        with st.expander("❌ 처리 실패 항목"):
+            df_failed = pd.DataFrame(failed_results)
+            h4 = min(44 * (len(df_failed) + 1), 400)
+            st.dataframe(df_failed, use_container_width=True, height=h4, hide_index=True)
