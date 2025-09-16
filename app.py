@@ -451,19 +451,28 @@ classification_chain_single = (
 # Streamlit UI (심플하게)
 # ========================================
 # 헤더
-col1, col2, col3 = st.columns([1, 2, 1])
-with col2:
-    if os.path.exists("assets/CateGOMe_kor.png"):
-        st.image("assets/CateGOMe_kor.png", width=400)
-    else:
-        st.title("🤖 CateGOMe")
-    
-    st.markdown("""
-    <div style='text-align: center; color: #666; margin-bottom: 30px;'>
-    가계동향조사 항목코드 자동분류 AI 서비스<br>
-    가계부 이미지를 업로드하면 자동으로 품목을 분류해드립니다
-    </div>
-    """, unsafe_allow_html=True)
+# 전역 어느 곳(예: 페이지 설정 아래)에 CSS 주입
+st.markdown("""
+<style>
+.categome-center { display:flex; justify-content:center; align-items:center; }
+.categome-caption { text-align:center; color:#666; margin-bottom:30px; }
+</style>
+""", unsafe_allow_html=True)
+
+# 헤더
+st.markdown('<div class="categome-center">', unsafe_allow_html=True)
+if os.path.exists("assets/CateGOMe_kor.png"):
+    st.image("assets/CateGOMe_kor.png", width=420)
+else:
+    st.title("🤖 CateGOMe")
+st.markdown('</div>', unsafe_allow_html=True)
+
+st.markdown("""
+<div class="categome-caption">
+가계동향조사 항목코드 자동분류 AI 서비스<br>
+가계부 이미지를 업로드하면 자동으로 품목을 분류해드립니다
+</div>
+""", unsafe_allow_html=True)
 
 # ----------------------------------------------------------
 # 세션 스토리지 기본값
@@ -650,8 +659,8 @@ JSON 스키마:
                 height=h,
                 hide_index=True,
                 column_config={
-                    "수입": st.column_config.NumberColumn(format="%,d"),
-                    "지출": st.column_config.NumberColumn(format="%,d"),
+                    "수입": st.column_config.NumberColumn(format="%d", step=1),
+                    "지출": st.column_config.NumberColumn(format="%d", step=1),
                     "입력코드": st.column_config.TextColumn(),
                     "신뢰도": st.column_config.TextColumn(),
                 },
@@ -676,8 +685,8 @@ JSON 스키마:
                         height=h2,
                         hide_index=True,
                         column_config={
-                            "수입합계": st.column_config.NumberColumn(format="%,d"),
-                            "지출합계": st.column_config.NumberColumn(format="%,d"),
+                            "수입합계": st.column_config.NumberColumn(format="%d", step=1),
+                            "지출합계": st.column_config.NumberColumn(format="%d", step=1),
                         },
                     )
 
