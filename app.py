@@ -12,7 +12,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# # --- 헬퍼 함수들 ---
+# --- 헬퍼 함수들 ---
 # def get_base64_image(image_path):
 #     """이미지를 base64 문자열로 변환"""
 #     try:
@@ -30,6 +30,22 @@ st.set_page_config(
 #         return f'<img src="data:image/png;base64,{img_base64}" width="{size}">'
 #     return emoji_fallback
 
+def display_image_or_emoji(paths_dict: dict, key: str, fallback_emoji: str, width: int = 30) -> str:
+    """
+    이미지 파일이 존재하면 Base64로 인코딩된 HTML 이미지 태그를 반환하고,
+    없으면 fallback 이모지를 반환합니다.
+    """
+    try:
+        image_path = paths_dict.get(key)
+        if image_path and os.path.exists(image_path):
+            with open(image_path, "rb") as f:
+                content = f.read()
+            b64_content = base64.b64encode(content).decode()
+            return f'<img src="data:image/png;base64,{b64_content}" width="{width}">'
+    except Exception:
+        pass  # 파일 처리 중 오류가 발생하면 fallback 이모지를 반환
+    return fallback_emoji
+    
 
 # --- 앱 데이터 및 모델 초기화 ---
 
