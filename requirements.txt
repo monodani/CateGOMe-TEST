@@ -2,7 +2,9 @@ streamlit
 google-generativeai
 openai
 langchain
+langchain-community
 langchain-openai
+langchain-core
 pandas
 faiss-cpu
 numpy
