@@ -1,11 +1,4 @@
----
-
-### **4. `app.py`**
-
-사용자 인터페이스와 앱의 전체 흐름을 제어하는 메인 파일입니다.
-
-```python
-# /app.py
+# **app.py** / 사용자 인터페이스와 앱의 전체 흐름을 제어하는 메인 파일
 
 import streamlit as st
 from utils import initialize_app_data
