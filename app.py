@@ -684,36 +684,55 @@ if results is not None:
             },
         )
 
-            # --- (3) 입력코드별 요약 보기 (재계산 없이 캐시로부터) ---
-            if st.checkbox("입력코드별 요약 보기", key="show_summary"):
-                numeric_codes_mask = pd.to_numeric(df_definite['입력코드'], errors='coerce').notna()
-                df_summary = df_definite[numeric_codes_mask].copy()
-                if not df_summary.empty:
-                    df_summary['입력코드'] = df_summary['입력코드'].astype(float).astype(int)
-                    df_summary_agg = df_summary.groupby('입력코드').agg(
-                        항목명=('항목명', 'first'),
-                        수입합계=('수입', 'sum'),
-                        지출합계=('지출', 'sum'),
-                        해당품목명=('품목명', lambda x: ', '.join(x))
-                    ).reset_index()
+results = st.session_state.get("results")
+if results is not None:
+    df_definite        = results["df_definite"]
+    ambiguous_results  = results["ambiguous_results"]
+    failed_results     = results["failed_results"]
+    
+    st.markdown("---")
+    st.markdown("## 📊 분류 결과")
 
-                    # 교체 (표시용 복사본 + 문자열 포맷으로 렌더링)
-                    view_sum = df_summary_agg.copy()
-                    view_sum["수입합계"] = view_sum["수입합계"].map(fmt_won)
-                    view_sum["지출합계"] = view_sum["지출합계"].map(fmt_won)
-                    
-                    h2 = min(44 * (len(view_sum) + 1), 500)
-                    st.dataframe(
-                        view_sum[['입력코드', '항목명', '수입합계', '지출합계', '해당품목명']],
-                        use_container_width=True,
-                        height=h2,
-                        hide_index=True,
-                        column_config={
-                            "수입합계": st.column_config.TextColumn(),
-                            "지출합계": st.column_config.TextColumn(),
-                        },
-                    )
+    # --- (1) 명확하게 분류된 품목 ---
+    if not df_definite.empty:
+        # (명확하게 분류된 품목을 표시하는 코드)
+        # ...
 
+    # --- (2) 애매하게 분류된 품목 ---
+    # (애매한 품목을 표시하는 코드)
+    # ...
+
+
+    # --- (3) 입력코드별 요약 보기 (재계산 없이 캐시로부터) ---
+    # 이 부분의 들여쓰기를 상위 if문(if results is not None:)에 맞춰 수정합니다.
+    if st.checkbox("입력코드별 요약 보기", key="show_summary"):
+        numeric_codes_mask = pd.to_numeric(df_definite['입력코드'], errors='coerce').notna()
+        df_summary = df_definite[numeric_codes_mask].copy()
+        if not df_summary.empty:
+            df_summary['입력코드'] = df_summary['입력코드'].astype(float).astype(int)
+            df_summary_agg = df_summary.groupby('입력코드').agg(
+                항목명=('항목명', 'first'),
+                수입합계=('수입', 'sum'),
+                지출합계=('지출', 'sum'),
+                해당품목명=('품목명', lambda x: ', '.join(x))
+            ).reset_index()
+
+            view_sum = df_summary_agg.copy()
+            view_sum["수입합계"] = view_sum["수입합계"].map(fmt_won)
+            view_sum["지출합계"] = view_sum["지출합계"].map(fmt_won)
+            
+            h2 = min(44 * (len(view_sum) + 1), 500)
+            st.dataframe(
+                view_sum[['입력코드', '항목명', '수입합계', '지출합계', '해당품목명']],
+                use_container_width=True,
+                height=h2,
+                hide_index=True,
+                column_config={
+                    "수입합계": st.column_config.TextColumn(),
+                    "지출합계": st.column_config.TextColumn(),
+                },
+            )
+            
             # --- (4) 명확한 분류에 대한 상세 근거 ---
             with st.expander("🔎 명확한 분류에 대한 상세 근거", expanded=False):
                 for row in df_definite.to_dict(orient="records"):
