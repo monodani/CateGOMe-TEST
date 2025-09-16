@@ -10,42 +10,42 @@ from pathlib import Path
 DATA_FILES = {
     # Vectorstores - cases
     "cases_faiss": {
-        "url": "https://github.com/monodani/CateGOMe-TEST/raw/main/vectorstores/cases/case_index.faiss",
-        "local_path": "vectorstores/cases/case_index.faiss"
+        "url": "https://github.com/monodani/CateGOMe-TEST/tree/main/vectorstores/cases/cases_index.faiss",
+        "local_path": "vectorstores/cases/cases_index.faiss"
     },
     "cases_pkl": {
-        "url": "https://github.com/monodani/CateGOMe-TEST/raw/main/vectorstores/cases/case_index.pkl",
-        "local_path": "vectorstores/cases/case_index.pkl"
+        "url": "https://github.com/monodani/CateGOMe-TEST/tree/main/vectorstores/cases/cases_index.pkl",
+        "local_path": "vectorstores/cases/cases_index.pkl"
     },
     # Vectorstores - classification
     "classification_faiss": {
-        "url": "https://github.com/monodani/CateGOMe-TEST/raw/main/vectorstores/classification/classification_index.faiss",
+        "url": "https://github.com/monodani/CateGOMe-TEST/tree/main/vectorstores/classification/classification_index.faiss",
         "local_path": "vectorstores/classification/classification_index.faiss"
     },
     "classification_pkl": {
-        "url": "https://github.com/monodani/CateGOMe-TEST/raw/main/vectorstores/classification/classification_index.pkl",
+        "url": "https://github.com/monodani/CateGOMe-TEST/tree/main/vectorstores/classification/classification_index.pkl",
         "local_path": "vectorstores/classification/classification_index.pkl"
     },
     # Main Data CSV
     "classification_csv": {
-        "url": "https://github.com/monodani/CateGOMe-TEST/raw/main/data/classification_code.csv",
+        "url": "https://github.com/monodani/CateGOMe-TEST/tree/main/data/classification_code.csv",
         "local_path": "data/classification_code.csv"
     },
     # Asset Images
     "logo_main": {
-        "url": "https://github.com/monodani/CateGOMe-TEST/raw/main/assets/CateGOMe/CateGOMe_kor.png",
+        "url": "https://github.com/monodani/CateGOMe-TEST/tree/main/assets/CateGOMe/CateGOMe_kor.png",
         "local_path": "assets/CateGOMe_kor.png"
     },
     "emoji_hi": {
-        "url": "https://github.com/monodani/CateGOMe-TEST/raw/main/assets/emoji/CateGOMe_emoji_hi.png",
+        "url": "https://github.com/monodani/CateGOMe-TEST/tree/main/assets/emoji/CateGOMe_emoji_hi.png",
         "local_path": "assets/CateGOMe_emoji_hi.png"
     },
     "emoji_categorizing": {
-        "url": "https://github.com/monodani/CateGOMe-TEST/raw/main/assets/emoji/CateGOMe_emoji_categorying.png",
+        "url": "https://github.com/monodani/CateGOMe-TEST/tree/main/assets/emoji/CateGOMe_emoji_categorying.png",
         "local_path": "assets/CateGOMe_emoji_categorying.png"
     },
     "emoji_sorry": {
-        "url": "https://github.com/monodani/CateGOMe-TEST/raw/main/assets/emoji/CateGOMe_emoji_sorry.png",
+        "url": "https://github.com/monodani/CateGOMe-TEST/tree/main/assets/emoji/CateGOMe_emoji_sorry.png",
         "local_path": "assets/CateGOMe_emoji_sorry.png"
     }
 }
