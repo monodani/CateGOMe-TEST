@@ -4,6 +4,7 @@ import json
 import ast
 import pandas as pd
 from typing import List, Dict, Any
+from pathlib import Path
 
 # LangChain 및 AI 모델 관련 라이브러리
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
@@ -14,6 +15,8 @@ from langchain_core.output_parsers import StrOutputParser
 from operator import itemgetter
 import google.generativeai as genai
 
+BASE_DIR = Path(__file__).resolve().parent
+
 # --- 설정값 (Configuration) ---
 # 이 부분의 값을 변경하여 모델의 동작을 파인튜닝할 수 있습니다.
 
@@ -23,11 +26,11 @@ LLM_MODEL = "gpt-4o"
 GEMINI_MODEL = "gemini-1.5-flash"
 
 # 2. 벡터스토어 및 데이터 경로 설정
-VECTORSTORE_DIR_CASES = "vectorstores/cases"
+VECTORSTORE_DIR_CASES = BASE_DIR / "vectorstores" / "cases"
 INDEX_NAME_CASES = "cases_index"
-VECTORSTORE_DIR_CLASSIFICATION = "vectorstores/classification"
+VECTORSTORE_DIR_CLASSIFICATION = BASE_DIR / "vectorstores" / "classification"
 INDEX_NAME_CLASSIFICATION = "classification_index"
-CSV_PATH = "data/classification_code.csv"
+CSV_PATH = BASE_DIR / "data" / "classification_code.csv"
 
 # 3. 검색 알고리즘 파라미터
 NUM_RELATED_TERMS = 3
@@ -47,16 +50,23 @@ def initialize_models_and_data(openai_api_key: str):
     global _embeddings, _vectorstores, _df, _llm_model, _code_to_name_map
     
     try:
+        # --- 디버깅 강화: 파일 존재 여부 명시적 확인 ---
+        if not CSV_PATH.is_file():
+            return False, f"CRITICAL ERROR: classification_code.csv 파일을 찾을 수 없습니다. 경로: {CSV_PATH}"
+        if not (VECTORSTORE_DIR_CASES / f"{INDEX_NAME_CASES}.faiss").is_file():
+            return False, f"CRITICAL ERROR: cases_index.faiss 파일을 찾을 수 없습니다. 경로: {VECTORSTORE_DIR_CASES}"
+
         _embeddings = OpenAIEmbeddings(model=EMBED_MODEL, openai_api_key=openai_api_key)
+        
 
         vs_cases = FAISS.load_local(
-            folder_path=VECTORSTORE_DIR_CASES,
+            folder_path=str(VECTORSTORE_DIR_CASES), # pathlib 객체를 문자열로 변환
             embeddings=_embeddings,
             index_name=INDEX_NAME_CASES,
             allow_dangerous_deserialization=True
         )
         vs_classification = FAISS.load_local(
-            folder_path=VECTORSTORE_DIR_CLASSIFICATION,
+            folder_path=str(VECTORSTORE_DIR_CLASSIFICATION), # pathlib 객체를 문자열로 변환
             embeddings=_embeddings,
             index_name=INDEX_NAME_CLASSIFICATION,
             allow_dangerous_deserialization=True
@@ -73,7 +83,7 @@ def initialize_models_and_data(openai_api_key: str):
 
         return True, "초기화 성공"
     except Exception as e:
-        return False, f"초기화 실패: {e}"
+        return False, f"초기화 중 심각한 오류 발생: {e}"
 
 # --- 헬퍼 함수들 (Helper Functions) ---
 
