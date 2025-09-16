@@ -24,7 +24,7 @@ GEMINI_MODEL = "gemini-1.5-flash"
 
 # 2. 벡터스토어 및 데이터 경로 설정
 VECTORSTORE_DIR_CASES = "vectorstores/cases"
-INDEX_NAME_CASES = "case_index"
+INDEX_NAME_CASES = "cases_index"
 VECTORSTORE_DIR_CLASSIFICATION = "vectorstores/classification"
 INDEX_NAME_CLASSIFICATION = "classification_index"
 CSV_PATH = "data/classification_code.csv"
