@@ -1,76 +1,675 @@
-# /app.py (FINAL VERSION - ALL-IN-ONE)
-
+# ========================================
+# 🔧 설정값 (Colab 코드 그대로)
+# ========================================
 import streamlit as st
+
+# API Key 설정 (Streamlit secrets 사용)
+OPENAI_API_KEY = st.secrets["OPENAI_API_KEY"]
+GOOGLE_API_KEY = st.secrets["GOOGLE_API_KEY"]
+
+# --- Global (1회 로드 캐시) ----------------------------------------------------
+EMBED_MODEL = "text-embedding-3-large"
+LLM_MODEL = "gpt-4o"  # 통합 모델명 변수 사용
+
+VECTORSTORE_DIR_CASES = "vectorstores/cases"
+INDEX_NAME_CASES = "cases_index"
+VECTORSTORE_DIR_CLASSIFICATION = "vectorstores/classification"
+INDEX_NAME_CLASSIFICATION = "classification_index"
+CSV_PATH = "data/classification_code.csv"
+
+REQUIRED_COLS = ["항목명", "입력코드", "처리코드", "항목분류내용", "포함항목", "제외항목"]
+
+# ========================================
+# 📦 라이브러리 임포트 (Colab 코드 그대로)
+# ========================================
 import os
-import base64
-from cate_gome_logic import load_all_data_and_models, get_classification_report
+import re
+import json
+import ast
+from typing import List, Dict, Any
+from operator import itemgetter
 
-# --- 페이지 기본 설정 ---
-st.set_page_config(page_title="카테고미(CateGOMe)", page_icon="🐻", layout="wide")
+import pandas as pd
+from PIL import Image
+import google.generativeai as genai
 
-# --- 헬퍼 함수 정의 ---
-def display_image_or_emoji(path: str, fallback_emoji: str, width: int = 30) -> str:
-    """이미지 파일이 있으면 Base64 HTML 태그를, 없으면 fallback 이모지를 반환합니다."""
-    if path and os.path.exists(path):
-        try:
-            with open(path, "rb") as f:
-                content = base64.b64encode(f.read()).decode()
-            return f'<img src="data:image/png;base64,{content}" width="{width}">'
-        except Exception:
-            return fallback_emoji
-    return fallback_emoji
+from langchain.prompts import PromptTemplate
+from langchain.docstore.document import Document
+from langchain_core.output_parsers import StrOutputParser
+from langchain_openai import ChatOpenAI, OpenAIEmbeddings
+from langchain_community.vectorstores import FAISS
 
-# --- API 키 및 데이터 로딩 ---
-openai_api_key = st.secrets.get("OPENAI_API_KEY")
-genai_api_key = st.secrets.get("GENAI_API_KEY")
+# Gemini 설정
+genai.configure(api_key=GOOGLE_API_KEY)
 
-if not openai_api_key or not genai_api_key:
-    st.error("API 키가 설정되지 않았습니다. Streamlit Secrets을 확인해주세요.")
-    st.stop()
+# ========================================
+# Streamlit 페이지 설정
+# ========================================
+st.set_page_config(
+    page_title="CateGOMe - 가계동향조사 자동분류 AI",
+    page_icon="📊",
+    layout="wide"
+)
 
-# 단일 함수로 모든 데이터와 모델을 로드합니다.
-with st.spinner("카테고미 서비스에 필요한 데이터를 준비 중이에요... 🤖"):
-    loaded_data = load_all_data_and_models(openai_api_key)
+# ========================================
+# Colab 초기화 코드 그대로 (캐싱 추가)
+# ========================================
+@st.cache_resource
+def initialize_system():
+    try:
+        _embeddings = OpenAIEmbeddings(model=EMBED_MODEL, openai_api_key=OPENAI_API_KEY)
 
-# --- UI 구성 ---
-# 로고 이미지는 이제 GitHub에서 직접 다운로드하지 않고, 로컬 경로를 사용합니다.
-st.image("assets/CateGOMe/CateGOMe_kor.png", width=400) # 로고 경로는 assets 폴더 기준으로 고정
-st.title("가계부 자동 분류 서비스")
-st.markdown("---")
+        # === 수정된 부분: 두 개의 벡터스토어 로드 ===
+        _vectorstore_cases = FAISS.load_local(
+            folder_path=VECTORSTORE_DIR_CASES,
+            embeddings=_embeddings,
+            index_name=INDEX_NAME_CASES,
+            allow_dangerous_deserialization=True
+        )
 
-hi_emoji = display_image_or_emoji("assets/emoji/CateGOMe_emoji_hi.png", "👋")
-st.markdown(f"안녕하세요! 가계부 이미지를 업로드해주시면 제가 알아서 분류해 드릴게요. {hi_emoji}", unsafe_allow_html=True)
+        _vectorstore_classification = FAISS.load_local(
+            folder_path=VECTORSTORE_DIR_CLASSIFICATION,
+            embeddings=_embeddings,
+            index_name=INDEX_NAME_CLASSIFICATION,
+            allow_dangerous_deserialization=True
+        )
 
-if 'results_log' not in st.session_state:
-    st.session_state['results_log'] = []
+        # 벡터스토어들을 리스트로 관리하여 확장성 확보
+        _vectorstores = {
+            "cases": _vectorstore_cases,
+            "classification": _vectorstore_classification
+        }
+        # ============================================
 
-uploaded_file = st.file_uploader("여기에 가계부 이미지를 드래그 앤 드롭하거나 클릭하여 업로드하세요.", type=['png', 'jpg', 'jpeg'])
+        _df = pd.read_csv(CSV_PATH, encoding='utf-8')
+        missing = [c for c in REQUIRED_COLS if c not in _df.columns]
+        if missing:
+            raise KeyError(f"ERROR[csv]: Missing required columns: {missing}")
+        # 고유키(중복 제거용) 없으면 행 인덱스 사용
+        _df = _df.reset_index(drop=False).rename(columns={"index": "_rowid"})
 
-if uploaded_file is not None:
-    # use_container_width 경고 수정
-    st.image(uploaded_file, caption="업로드된 이미지", use_container_width='stretch')
+        # LLM 모델도 캐시
+        _llm_model = ChatOpenAI(
+            model_name=LLM_MODEL,
+            temperature=0.1,
+            openai_api_key=OPENAI_API_KEY
+        )
 
-    if st.button("분류시작", type="primary"):
-        categorizing_emoji = display_image_or_emoji("assets/emoji/CateGOMe_emoji_categorying.png", "🤓", 40)
-        spinner_message = f"카테고미가 열심히 분류 중이에요... 잠시만 기다려주세요! {categorizing_emoji}"
-        
-        with st.spinner(spinner_message):
+        return _embeddings, _vectorstores, _df, _llm_model
+
+    except Exception as e:
+        st.error(f"초기화 실패: {e}")
+        return None, None, None, None
+
+# 초기화
+_embeddings, _vectorstores, _df, _llm_model = initialize_system()
+
+# ========================================
+# Colab 헬퍼 함수들 그대로
+# ========================================
+def _short_doc_from_row(row: pd.Series) -> Document:
+    """
+    page_content는 토큰 낭비를 줄이기 위해 핵심 필드만.
+    나머지는 metadata에 담는다.
+    '출처' 정보를 page_content 맨 앞에 추가하고, '입력코드'를 정수형으로 변환합니다.
+    """
+    source = row.get('출처', '항목분류집')
+    source_info = f"출처: {source}\n"
+
+    core_fields_order = [col for col in ["입력코드", "항목명", "항목분류내용", "처리코드", "포함항목", "제외항목"] if col in row.index]
+
+    core_lines = []
+    for col in core_fields_order:
+        value = row[col]
+
+        # '입력코드' 컬럼일 경우, 정수로 변환을 시도합니다.
+        if col == "입력코드":
             try:
-                image_bytes = uploaded_file.getvalue()
-                # 로드된 데이터를 get_classification_report 함수에 전달
-                report = get_classification_report(image_bytes, genai_api_key, loaded_data)
-                st.session_state.results_log.insert(0, report)
-            except Exception as e:
-                sorry_emoji = display_image_or_emoji("assets/emoji/CateGOMe_emoji_sorry.png", "🚨")
-                st.error(f"죄송해요, 처리 중 오류가 발생했어요. {sorry_emoji}", icon=" ")
-                st.error(f"오류 상세 내용: {e}")
+                # float으로 먼저 변환 후 int로 변환하여 "720.0" 같은 문자열도 처리
+                value_str = str(int(float(value)))
+            except (ValueError, TypeError):
+                # 변환 실패 시 (예: NaN, 비숫자 문자열) 원본 값을 그대로 사용
+                value_str = str(value)
+        else:
+            value_str = str(value)
+        # ============================
 
-st.markdown("---")
-st.subheader("분석 결과 로그")
+        core_lines.append(f"{col}: {value_str}")
 
-if not st.session_state.results_log:
-    st.info("아직 분석한 내역이 없어요. 이미지를 업로드하고 '분류시작' 버튼을 눌러주세요!")
-else:
-    for i, report_md in enumerate(st.session_state.results_log):
-        with st.expander(f"결과 로그 #{len(st.session_state.results_log) - i} (클릭하여 확인)", expanded=(i==0)):
-            st.markdown(report_md, unsafe_allow_html=True)
+    page = source_info + "\n".join(core_lines)
+    meta = row.to_dict()
+    return Document(page_content=page, metadata=meta)
+
+
+def _keyword_search(df: pd.DataFrame, term: str) -> List[Document]:
+    """부분일치 contains, 대소문자 무시. 상한 없음(요청 반영)."""
+    if df is None:  # 초기화 실패 시
+        return []
+    # NaN 안전 처리 및 타입 변환
+    df_copy = df.copy()  # 원본 데이터프레임 변경 방지
+    for c in REQUIRED_COLS:
+        if c in df_copy.columns and df_copy[c].dtype != object:
+            df_copy[c] = df_copy[c].astype(str)
+
+    mask = (
+        df_copy["항목분류내용"].str.contains(term, case=False, na=False) |
+        df_copy["항목명"].str.contains(term, case=False, na=False) |
+        df_copy["포함항목"].str.contains(term, case=False, na=False) |
+        df_copy["제외항목"].str.contains(term, case=False, na=False)
+    )
+    sub = df_copy.loc[mask]
+    # 중복 제거(행 인덱스 기반)
+    sub = sub.drop_duplicates(subset=["_rowid"], keep="first")
+    return [_short_doc_from_row(r) for _, r in sub.iterrows()]
+
+
+def _keyword_search_on_docs(docs: List[Document], term: str) -> List[Document]:
+    """메모리에 로드된 Document 객체 리스트에서 직접 키워드 검색을 수행합니다."""
+    if not docs:
+        return []
+
+    # page_content에 term이 포함된 모든 문서를 반환 (대소문자 무시)
+    return [doc for doc in docs if term.lower() in doc.page_content.lower()]
+
+
+def _similarity_topk_for_term(vs: FAISS, embeddings: OpenAIEmbeddings, term: str, k: int = 2) -> List[Document]:
+    if vs is None or embeddings is None:  # 초기화 실패 시
+        return []
+    retriever = vs.as_retriever(
+        search_type="mmr",  # MMR 사용 유지
+        search_kwargs={"k": k, "fetch_k": 30, "lambda_mult": 0.5}
+    )
+    return retriever.invoke(term)
+
+def _get_term_info_via_llm(llm: ChatOpenAI, user_query: str, num_related_terms: int = 3) -> List[Dict[str, Any]]:
+    """
+    LLM을 호출하여 사용자 쿼리에서 핵심 품목명들을 추출하고, 각 품목명에 대한 설명과 관련 용어를 받습니다.
+    안정적인 JSON 추출을 위해 프롬프트와 파싱 로직이 강화되었습니다.
+    """
+    if llm is None:
+        return []
+
+    # === 품목 설명 및 관련어 반환 프롬프트 (Colab 그대로) ===
+    prompt = f"""
+너는 사용자 쿼리에서 'product_name' 리스트에 포함된 모든 품목명을 분석하고, 오탈자를 교정한 뒤 검색에 유용한 정보를 추출하는 전문가 AI이다.
+
+## 작업 절차 (반드시 순서대로 따를 것) ##
+1. **품목명 추출:** `product_name = [...]` 리스트에 있는 모든 원본 품목명을 빠짐없이 추출한다.
+2. **오탈자 교정:** 각 원본 품목명의 오탈자나 불분명한 표현을 가장 자연스럽고 일반적인 표현으로 수정한다. (예: "색지피티" -> "챗지피티") 만약 수정할 필요가 없다면 원본을 그대로 사용한다.
+3. **설명 생성:** **수정된 품목명**에 대해, 그 품목의 본질과 목적을 2~3 문장으로 간결하게 설명한다.
+4. **관련 용어 추출 (매우 중요):**
+   - **수정된 품목명**과 **네가 작성한 설명**을 모두 참고하여, 검색에 가장 중요하다고 판단되는 핵심 관련 용어를 {num_related_terms}개 추출한다.
+   - **단순 동의어를 넘어, 그 품목의 '목적'이나 '상위 카테고리'에 해당하는 개념적인 단어를 반드시 포함해야 한다.** (예: '전기차 충전'의 목적은 '연료'를 채우는 것이므로 '연료'나 '에너지'를 포함)
+
+5. **JSON 출력:** 다른 어떤 설명도 없이, 아래 "출력 예시"와 **완벽하게 동일한 JSON 형식**으로만 응답한다.
+
+## 입력 및 출력 예시 (매우 중요) ##
+### 입력 쿼리 예시:
+'''product_name = ['스타벅스조각케익', '전기차 충전', '색지피티'] ...'''
+
+### 너의 JSON 출력 예시:
+```json
+{{
+  "terms": [
+    {{
+      "original_term": "스타벅스조각케익",
+      "term": "스타벅스 조각케익",
+      "description": "스타벅스 커피 전문점에서 판매하는 조각 형태의 케이크입니다. 커피와 함께 즐기는 대표적인 디저트 메뉴 중 하나입니다.",
+      "related_terms": ["스타벅스", "케이크", "디저트"]
+    }},
+    {{
+      "original_term": "전기차 충전",
+      "term": "전기차 충전",
+      "description": "전기 자동차의 배터리에 전력을 공급하는 행위입니다. 자동차를 운행하기 위한 에너지를 채우는 과정입니다.",
+      "related_terms": ["전기차", "충전소", "연료"]
+    }},
+    {{
+      "original_term": "색지피티",
+      "term": "챗지피티",
+      "description": "OpenAI가 개발한 대화형 인공지능 서비스로, 자연어 이해와 생성에 특화되어 사용자 질의에 답변하고 다양한 작업을 보조합니다. 대규모 언어모델(LLM)을 기반으로 요약, 번역, 코드 작성 등 폭넓은 기능을 제공합니다.",
+      "related_terms": ["생성형AI", "AI", "LLM"]
+    }}
+  ]
+}}
+---
+이제 아래 사용자 입력 쿼리를 처리해라. 다른 말은 절대 하지 말고 JSON만 출력해라.
+
+사용자 입력 쿼리: {user_query}
+"""
+
+    try:
+        res = llm.invoke(prompt)
+        text_content = res.content.strip()
+
+        json_match = re.search(r'\{.*\}', text_content, re.DOTALL)
+        if not json_match:
+            raise json.JSONDecodeError("LLM 응답에서 유효한 JSON 객체를 찾지 못했습니다.", text_content, 0)
+
+        json_str = json_match.group(0)
+        data = json.loads(json_str)
+
+        terms_info = data.get("terms", [])
+
+        # 기본 정리
+        cleaned_terms_info = []
+        for item in terms_info:
+            if item.get("term") and item.get("description"):
+                cleaned_related = []
+                for rt in item.get("related_terms", []):
+                    rt_norm = re.sub(r"\s+", " ", str(rt)).strip().lower()
+                    if rt_norm:
+                        cleaned_related.append(re.sub(r"\s+", " ", str(rt)).strip())
+                cleaned_terms_info.append({
+                    "term": re.sub(r"\s+", " ", str(item["term"])).strip(),
+                    "description": item["description"].strip(),
+                    "related_terms": cleaned_related[:num_related_terms]
+                })
+        return cleaned_terms_info
+
+    except Exception as e:
+        # 폴백 로직
+        return [{"term": user_query, "description": "", "related_terms": []}]
+
+# search_classification_codes 함수 (Colab 그대로)
+def search_classification_codes(
+    user_query: str,
+    all_docs_from_vs: Dict[str, List[Document]],  # 파라미터
+    sim_topk_per_term: int = 3,  # 유사도 검색 결과 개수
+    num_related_terms: int = 3  # LLM 관련 용어 개수
+) -> Dict[str, Any]:
+    """
+    사용자 쿼리에 대해 분류 코드를 검색합니다.
+    (Colab 코드 그대로)
+    """
+    # 초기화 상태 확인
+    if _df is None or _embeddings is None or _vectorstores is None or _llm_model is None or OPENAI_API_KEY is None:
+        return {
+            "query": user_query,
+            "extracted_terms_info": [],
+            "results": {"keyword": [], "similarity": []},
+            "context_docs": [],
+            "error": "시스템 초기화 실패 (데이터, 벡터스토어, LLM 또는 API 키). 관리자에게 문의하세요."
+        }
+
+    if not isinstance(user_query, str) or not user_query.strip():
+        return {
+            "query": user_query,
+            "extracted_terms_info": [],
+            "results": {"keyword": [], "similarity": []},
+            "context_docs": [],
+            "error": "유효하지 않은 사용자 쿼리입니다."
+        }
+
+    # 1. LLM을 사용하여 쿼리에서 핵심 용어 추출 및 설명, 관련 용어 받기
+    extracted_terms_info = _get_term_info_via_llm(_llm_model, user_query, num_related_terms=num_related_terms)
+
+    all_relevant_docs: List[Document] = []  # 키워드 또는 유사도 검색 결과를 모두 담을 리스트
+    seen_docs_page_content = set()  # 중복 제거용
+
+    all_keyword_docs_raw: List[Document] = []  # 디버깅용: 중복 포함 키워드 결과
+    all_similarity_docs_raw: List[Document] = []  # 디버깅용: 중복 포함 유사도 결과
+
+    for item in extracted_terms_info:
+        term = item["term"]
+        description = item["description"]
+        related_terms = item.get("related_terms", [])
+
+        # 2. 각 핵심 용어(원어)와 관련 용어에 대해 키워드 검색 수행
+        terms_to_keyword_search = [term] + related_terms
+        for search_term in terms_to_keyword_search:
+            kw_docs = _keyword_search(_df, search_term)
+            if kw_docs:
+                all_keyword_docs_raw.extend(kw_docs)  # 디버깅용 결과 추가
+                for doc in kw_docs:
+                    if doc.page_content not in seen_docs_page_content:
+                        all_relevant_docs.append(doc)
+                        seen_docs_page_content.add(doc.page_content)
+
+        # === 검색 B: 벡터스토어에 대한 키워드 검색 ===
+        for name, doc_list in all_docs_from_vs.items():
+            for search_term in terms_to_keyword_search:
+                kw_docs_vs = _keyword_search_on_docs(doc_list, search_term)
+                if kw_docs_vs:
+                    docs_to_add = [Document(page_content=f"출처: {name}\n{doc.page_content}", metadata=doc.metadata) for doc in kw_docs_vs]
+                    all_keyword_docs_raw.extend(docs_to_add)
+                    for doc in docs_to_add:
+                        if doc.page_content not in seen_docs_page_content:
+                            all_relevant_docs.append(doc)
+                            seen_docs_page_content.add(doc.page_content)
+
+        # === 여러 벡터스토어에서 유사도 검색 수행 ===
+        if description:
+            for name, vs in _vectorstores.items():
+                sim_docs = _similarity_topk_for_term(vs, _embeddings, description, k=sim_topk_per_term)
+                if sim_docs:
+                    docs_to_add = []
+                    for doc in sim_docs:
+                        new_doc = Document(page_content=f"출처: {name}\n{doc.page_content}", metadata=doc.metadata)
+                        docs_to_add.append(new_doc)
+
+                    all_similarity_docs_raw.extend(docs_to_add)
+                    for doc in docs_to_add:
+                        if doc.page_content not in seen_docs_page_content:
+                            all_relevant_docs.append(doc)
+                            seen_docs_page_content.add(doc.page_content)
+
+    # 4. 수집된 모든 문서를 합치고 중복 제거 (all_relevant_docs에 이미 중복 제거되어 수집됨)
+    unique_docs_objects = all_relevant_docs  # 변수명 통일
+
+    return {
+        "query": user_query,
+        "extracted_terms_info": extracted_terms_info,
+        "results": {
+            "keyword": all_keyword_docs_raw,  # 모든 키워드 검색 결과 (중복 포함 가능)
+            "similarity": all_similarity_docs_raw  # 모든 유사도 검색 결과 (중복 포함 가능)
+        },
+        "context_docs": unique_docs_objects  # GPT에 전달할 최종 중복 제거된 Document 객체 목록
+    }
+
+# prompt_template_single (Colab 프롬프트 그대로 사용)
+prompt_template_single = PromptTemplate.from_template("""
+    SYSTEM: 당신은 주어진 데이터를 분석하여 가장 적합한 '입력코드'와 '항목명'을 추론하는, 극도로 꼼꼼하고 규칙을 엄수하는 데이터 분류 AI이며, 당신의 이름은 "카테고미(CateGOMe)"입니다. 당신의 답변은 반드시 지정된 JSON 형식이어야 합니다.
+
+    ## 절대 규칙 (가장 중요! 반드시 따를 것) ##
+    1. **수입/지출 규칙:** `question`의 `expense` 값이 0보다 크면, `input_code`는 **절대로 1000 미만이 될 수 없습니다.** 반대로 `income` 값이 0보다 크면, `input_code`는 **절대로 1000 이상이 될 수 없습니다.** 예외는 없습니다.
+    2. **정보 우선순위 규칙:** `context`에서 `출처: 조사사례집`(또는 cases) 정보는 `출처: 항목분류집` 정보보다 **항상 우선**합니다. 만약 두 정보가 충돌하면, 무조건 '조사사례집'의 코드를 따라야 합니다.
+
+    ## 작업 절차 ##
+    1. **입력 분석:** `question`의 `품목명`, `income`, `expense` 값을 확인하고 [절대 규칙 1]을 기억합니다.
+    2. **컨텍스트 분석:**
+        - `품목명`과 가장 일치하는 **'조사사례집'** 내용이 있는지 먼저 찾습니다.
+        - 만약 명확한 사례가 있다면, [절대 규칙 2]에 따라 해당 코드를 **최우선 후보**로 고려합니다.
+        - 명확한 사례가 없다면, '항목분류집'에서 가장 적합한 정의를 찾습니다.
+    3. **분류 타입 결정:**
+        - **(DEFINITE 조건):** 위의 과정을 거쳐, 단 하나의 입력코드를 90% 이상의 신뢰도로 확신할 수 있는 경우에만 "DEFINITE"로 결정합니다. (예: '챗지피티' -> '챗지피티 구독료' 사례가 명확히 존재)
+        - **(AMBIGUOUS 조건):** 다음 중 하나라도 해당하면 **반드시 "AMBIGUOUS"**로 결정해야 합니다.
+            - 품목명이 너무 일반적이어서 여러 코드가 후보가 될 때 (예: '고등어' -> 간고등어? 바다어류? 수산동물통조림? 알 수 없음)
+            - **품목명이 특정 회사 이름이고, 그 회사가 다양한 종류의 상품/서비스를 제공하는 경우 (예: '네이버'  -> 온라인쇼핑몰, 페이 결제, 웹툰 등 다양한 서비스 상품이 있어 하나로 특정 불가)**
+            - 소득의 주체(가구주, 배우자, 기타가구원 등)가 불명확하여 여러 코드가 후보가 될 때 (예: '급여' -> 가구주급여? 배우자급여? 기타가구원급여?)
+    4. **JSON 출력:**결정된 분류 타입에 맞는 JSON 형식으로만 응답합니다. 다른 설명은 절대 추가하지 마세요.
+
+    ---
+    ## 좋은 예시와 나쁜 예시 ##
+
+    - **Question:** product_name = ['할리스커피조각케익'], expense = [10000]
+    - **Context:** ... [항목분류집] 케이크: 1085(케이크) ... [조사사례집] 커피숍 구매 조각 케익: 7560(주점·커피숍) ...
+    - **나쁜 판단:** '케이크'라는 일반 분류를 보고 `1085`를 선택하는 것.
+    - **좋은 판단:** [정보 우선순위 규칙]에 따라 '조사사례집'의 `7560`을 선택하고 "DEFINITE"로 분류.
+
+    ---
+    ## 출력 형식 (아래 형식 중 하나로만 응답) ##
+
+    ### A. 명확한 경우 (DEFINITE):
+    ```json
+    {{
+      "classification_type": "DEFINITE",
+      "result": {{
+        "input_code": "추론한 숫자 입력코드",
+        "confidence": "신뢰도 (예: 95%)",
+        "reason": "절대 규칙과 정보 우선순위 규칙에 입각하여 이 코드를 선택한 명확한 이유.",
+        "evidence": "근거로 사용한 가장 핵심적인 컨텍스트 내용(청크) 하나를 그대로 복사"
+      }}
+    }}
+    ```
+
+    ### B. 모호한 경우 (AMBIGUOUS)
+    ```json
+    {{
+      "classification_type": "AMBIGUOUS",
+      "reason_for_ambiguity": "왜 단일 코드로 확정할 수 없는지에 대한 핵심 이유 (예: '보험의 종류(화재, 건강, 운전, 자동차 등)가 명시되지 않아 여러 후보가 가능함')",
+      "candidates": [
+        {{
+          "input_code": "후보 입력코드 1"("후보 입력코드 1의 항목명"),
+          "confidence": "후보 1의 신뢰도 (예: 50%)",
+          "reason": "이 코드가 후보인 이유"
+        }},
+        {{
+          "input_code": "후보 입력코드 2"("후보 입력코드 2의 항목명"),,
+          "confidence": "후보 2의 신뢰도 (예: 30%)",
+          "reason": "이 코드가 후보인 이유"
+        }}
+      ],
+      "evidence": "판단에 사용된 가장 관련성 높은 컨텍스트 내용(청크) 하나를 그대로 복사"
+    }}
+    ```
+    ---
+    HUMAN:
+    #Question: {question}
+    #Context: {context}
+    Answer:
+""")
+
+# 단일 품목 처리 전용 체인
+classification_chain_single = (
+    {"question": itemgetter("question"), "context": itemgetter("context")}
+    | prompt_template_single
+    | _llm_model
+    | StrOutputParser()
+)
+
+# ========================================
+# Streamlit UI (심플하게)
+# ========================================
+# 헤더
+col1, col2, col3 = st.columns([1, 2, 1])
+with col2:
+    if os.path.exists("assets/CateGOMe_kor.png"):
+        st.image("assets/CateGOMe_kor.png", width=400)
+    else:
+        st.title("🤖 CateGOMe")
+    
+    st.markdown("""
+    <div style='text-align: center; color: #666; margin-bottom: 30px;'>
+    가계동향조사 항목코드 자동분류 AI 서비스<br>
+    가계부 이미지를 업로드하면 자동으로 품목을 분류해드립니다
+    </div>
+    """, unsafe_allow_html=True)
+
+# 이미지 업로드
+uploaded_file = st.file_uploader(
+    "가계부 이미지를 업로드하세요",
+    type=['png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp', 'tiff'],
+    help="드래그 앤 드롭 또는 클릭하여 파일 선택"
+)
+
+# 분류 시작 버튼
+if uploaded_file is not None:
+    col1, col2, col3 = st.columns([2, 1, 2])
+    with col2:
+        if st.button("🚀 분류 시작", type="primary", use_container_width=True):
+            
+            progress = st.progress(0, "이미지 분석 준비 중...")
+            
+            # ========================================
+            # Colab 메인 실행 코드 그대로
+            # ========================================
+            img = Image.open(uploaded_file).convert("RGB")
+            
+            progress.progress(20, "📸 이미지에서 텍스트 추출 중...")
+            
+            gemini_model = genai.GenerativeModel("gemini-1.5-flash")
+            
+            prompt = """
+    가계부 사진에서 표를 인식해서 각 행의
+    1) 품목명(= '수입종류 및 지출의 품명과 용도' 열),
+    2) 수입 금액,
+    3) 지출 금액
+    을 추출하라.
+
+    규칙:
+    - 금액의 쉼표(,)는 제거하고 정수로.
+    - 값이 비어 있으면 0으로.
+    - 제목행·체크박스·빈줄은 제외.
+    - 반드시 아래 JSON 스키마로만 출력.
+
+    JSON 스키마:
+    {
+      "items": [
+        {"name": "품목명", "income": 0, "expense": 0},
+        ...
+      ]
+    }
+    """
+
+            # Gemini로 OCR
+            img_bytes = uploaded_file.getvalue()
+            resp = gemini_model.generate_content(
+                [{"text": prompt}, {"inline_data": {"mime_type": uploaded_file.type, "data": img_bytes}}],
+                generation_config={"response_mime_type": "application/json"}
+            )
+
+            raw = resp.text
+            data = json.loads(raw)
+
+            # 후처리: 숫자/문자 보정(예외 대비)
+            items = []
+            for it in data.get("items", []):
+                name = str(it.get("name", "")).strip()
+                def to_int(x):
+                    s = str(x).replace(",", "").strip()
+                    return int(re.sub(r"[^\d]", "", s)) if re.search(r"\d", s) else 0
+                income = to_int(it.get("income", 0))
+                expense = to_int(it.get("expense", 0))
+                if name:
+                    items.append({"name": name, "income": income, "expense": expense})
+
+            product_name_list = [it["name"] for it in items]
+            income_list = [it["income"] for it in items]
+            expense_list = [it["expense"] for it in items]
+
+            progress.progress(30, f"✅ {len(items)}개 품목 발견")
+
+            # --- 입력코드와 항목명을 매핑하는 딕셔너리 생성 ---
+            _df['입력코드_str'] = _df['입력코드'].astype(str).str.replace(r'\.0$', '', regex=True)
+            code_to_name_map = pd.Series(_df.항목명.values, index=_df.입력코드_str).to_dict()
+
+            # 2. 문서 목록 미리 로드
+            all_docs_from_vs = {name: list(vs.docstore._dict.values()) for name, vs in _vectorstores.items()}
+
+            # 3. 개별 품목 처리 루프
+            # --- 결과를 세 종류로 나누어 저장할 리스트 초기화 ---
+            definite_results = []
+            ambiguous_results = []
+            failed_results = []
+
+            total = len(product_name_list)
+            for i, product_name_original in enumerate(product_name_list):
+                progress.progress(
+                    30 + int(60 * (i + 1) / total),
+                    f"🔍 분류 중... ({i+1}/{total}) - {product_name_original}"
+                )
+
+                # --- 수입/지출 정보를 포함하여 단일 쿼리 생성 ---
+                q_single = (f"product_name = ['{product_name_original}'], "
+                           f"income = [{income_list[i]}], expense = [{expense_list[i]}]")
+
+                search_output = search_classification_codes(q_single, all_docs_from_vs, sim_topk_per_term=3, num_related_terms=3)
+
+                try:
+                    product_name_corrected = search_output["extracted_terms_info"][0]["term"]
+                except (IndexError, KeyError):
+                    product_name_corrected = product_name_original
+
+                if "error" in search_output or not search_output["context_docs"]:
+                    failed_results.append({"품목명": product_name_corrected, "수입": income_list[i], "지출": expense_list[i], "실패 이유": "검색 결과 없음"})
+                    continue
+
+                context_docs = search_output["context_docs"]
+                context = "\n\n---\n\n".join([doc.page_content for doc in context_docs])
+                context = context.replace("출처: cases", "출처: 조사사례집").replace("출처: classification", "출처: 항목분류집")
+
+                # --- 수입/지출 정보를 포함한 최종 질문 생성 ---
+                final_question = (f"product_name = ['{product_name_corrected}'], "
+                                 f"income = [{income_list[i]}], expense = [{expense_list[i]}]")
+                input_data = {"question": final_question, "context": context}
+
+                try:
+                    output_json_str = classification_chain_single.invoke(input_data)
+                    json_match = re.search(r'\{.*\}', output_json_str, re.DOTALL)
+                    if not json_match:
+                        raise ValueError(f"LLM 응답에서 JSON 객체를 찾지 못했습니다.")
+
+                    llm_result = json.loads(json_match.group(0))
+                    classification_type = llm_result.get("classification_type")
+
+                    # --- LLM 결과에 따라 분기 처리 ---
+                    if classification_type == "DEFINITE":
+                        result = llm_result.get("result", {})
+                        input_code = str(result.get("input_code", "파싱 실패")).strip()
+                        # --- [추가] 항목명 찾아오기 ---
+                        item_name = code_to_name_map.get(input_code, "항목명 없음")
+
+                        definite_results.append({
+                            "품목명": product_name_corrected,
+                            "입력코드": str(result.get("input_code", "파싱 실패")).strip(),
+                            "항목명": item_name,
+                            "수입": income_list[i], "지출": expense_list[i],
+                            "신뢰도": result.get("confidence", "N/A"),
+                            "추론 이유": result.get("reason", "N/A"),
+                            "근거 정보": result.get("evidence", "N/A")
+                        })
+                    elif classification_type == "AMBIGUOUS":
+                        candidates = llm_result.get("candidates", [])
+                        for cand in candidates:
+                            cand_code = str(cand.get("input_code", "")).strip()
+                            cand['항목명'] = code_to_name_map.get(cand_code, "항목명 없음")
+
+                        ambiguous_results.append({
+                            "품목명": product_name_corrected,
+                            "수입": income_list[i], "지출": expense_list[i],
+                            "모호성 이유": llm_result.get("reason_for_ambiguity", "N/A"),
+                            "후보": llm_result.get("candidates", []),
+                            "근거 정보": llm_result.get("evidence", "N/A")
+                        })
+                    else:
+                        raise ValueError(f"알 수 없는 classification_type: {classification_type}")
+
+                except Exception as e:
+                    failed_results.append({"품목명": product_name_corrected, "수입": income_list[i], "지출": expense_list[i], "실패 이유": str(e)})
+
+            progress.progress(100, "✅ 분류 완료!")
+
+            # --- 4. 최종 결과 취합 및 보고서 생성 ---
+            st.markdown("---")
+            st.markdown("## 📊 분류 결과")
+
+            # --- Part 1: 명확하게 분류된 품목 ---
+            if definite_results:
+                st.markdown("### ✅ 명확하게 분류된 품목")
+                df_definite = pd.DataFrame(definite_results)
+                st.dataframe(df_definite[["품목명", "입력코드", "항목명", "신뢰도", "수입", "지출"]], use_container_width=True)
+
+                # 입력코드별 요약
+                if st.checkbox("입력코드별 요약 보기"):
+                    numeric_codes_mask = pd.to_numeric(df_definite['입력코드'], errors='coerce').notna()
+                    df_summary = df_definite[numeric_codes_mask].copy()
+
+                    if not df_summary.empty:
+                        df_summary['입력코드'] = df_summary['입력코드'].astype(float).astype(int)
+                        df_summary_agg = df_summary.groupby('입력코드').agg(
+                            항목명=('항목명', 'first'),
+                            수입합계=('수입', 'sum'),
+                            지출합계=('지출', 'sum'),
+                            해당품목명=('품목명', lambda x: ', '.join(x))
+                        ).reset_index()
+                        st.dataframe(df_summary_agg[['입력코드', '항목명', '수입합계', '지출합계', '해당품목명']], use_container_width=True)
+
+            # --- Part 2: 사용자의 검토가 필요한 품목 ---
+            if ambiguous_results:
+                st.markdown("### ⚠️ 사용자 검토가 필요한 품목")
+                st.info("아래 품목들은 정보가 부족하여 단일 코드를 확정하지 못했습니다.")
+                
+                for result in ambiguous_results:
+                    with st.expander(f"📌 {result['품목명']} (수입: {result['수입']:,}, 지출: {result['지출']:,})"):
+                        st.write(f"**검토 필요 이유:** {result['모호성 이유']}")
+                        st.write("**추천 후보:**")
+                        candidates_df = pd.DataFrame(result['후보'])
+                        st.dataframe(candidates_df, use_container_width=True)
+
+            # --- Part 3: 처리 실패 항목 ---
+            if failed_results:
+                with st.expander("❌ 처리 실패 항목"):
+                    df_failed = pd.DataFrame(failed_results)
+                    st.dataframe(df_failed, use_container_width=True)
+            
+            progress.empty()
