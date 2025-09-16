@@ -33,28 +33,20 @@ def load_all_data_and_models(openai_api_key: str):
     @st.cache_resource 덕분에 앱 세션 동안 딱 한 번만 실행됩니다.
     """
     # 1. 경로 및 파일 URL 정의
-    BASE_DIR = Path.cwd()  # Streamlit Cloud의 현재 작업 디렉토리를 기준으로 설정
+    BASE_DIR = Path.cwd() 
     DATA_FILES = {
-        "cases_faiss": {
-            "url": "https://raw.githubusercontent.com/monodani/CateGOMe-TEST/main/vectorstores/cases/cases_index.faiss",
-            "path": BASE_DIR / "vectorstores/cases/cases_index.faiss",
-        },
-        "cases_pkl": {
-            "url": "https://raw.githubusercontent.com/monodani/CateGOMe-TEST/main/vectorstores/cases/cases_index.pkl",
-            "path": BASE_DIR / "vectorstores/cases/cases_index.pkl",
-        },
-        "classification_faiss": {
-            "url": "https://raw.githubusercontent.com/monodani/CateGOMe-TEST/main/vectorstores/classification/classification_index.faiss",
-            "path": BASE_DIR / "vectorstores/classification/classification_index.faiss",
-        },
-        "classification_pkl": {
-            "url": "https://raw.githubusercontent.com/monodani/CateGOMe-TEST/main/vectorstores/classification/classification_index.pkl",
-            "path": BASE_DIR / "vectorstores/classification/classification_index.pkl",
-        },
-        "classification_csv": {
-            "url": "https://raw.githubusercontent.com/monodani/CateGOMe-TEST/main/data/classification_code.csv",
-            "path": BASE_DIR / "data/classification_code.csv",
-        },
+        # Core Data
+        "cases_faiss": {"url": "https://raw.githubusercontent.com/monodani/CateGOMe-TEST/main/vectorstores/cases/cases_index.faiss", "path": BASE_DIR / "vectorstores/cases/cases_index.faiss"},
+        "cases_pkl": {"url": "https://raw.githubusercontent.com/monodani/CateGOMe-TEST/main/vectorstores/cases/cases_index.pkl", "path": BASE_DIR / "vectorstores/cases/cases_index.pkl"},
+        "classification_faiss": {"url": "https://raw.githubusercontent.com/monodani/CateGOMe-TEST/main/vectorstores/classification/classification_index.faiss", "path": BASE_DIR / "vectorstores/classification/classification_index.faiss"},
+        "classification_pkl": {"url": "https://raw.githubusercontent.com/monodani/CateGOMe-TEST/main/vectorstores/classification/classification_index.pkl", "path": BASE_DIR / "vectorstores/classification/classification_index.pkl"},
+        "classification_csv": {"url": "https://raw.githubusercontent.com/monodani/CateGOMe-TEST/main/data/classification_code.csv", "path": BASE_DIR / "data/classification_code.csv"},
+        
+        # <<< 이 부분이 누락되었던 이미지 파일 다운로드 목록입니다.
+        "logo_main": {"url": "https://raw.githubusercontent.com/monodani/CateGOMe-TEST/main/assets/CateGOMe/CateGOMe_kor.png", "path": BASE_DIR / "assets/CateGOMe_kor.png"},
+        "emoji_hi": {"url": "https://raw.githubusercontent.com/monodani/CateGOMe-TEST/main/assets/emoji/CateGOMe_emoji_hi.png", "path": BASE_DIR / "assets/emoji/CateGOMe_emoji_hi.png"},
+        "emoji_categorizing": {"url": "https://raw.githubusercontent.com/monodani/CateGOMe-TEST/main/assets/emoji/CateGOMe_emoji_categorying.png", "path": BASE_DIR / "assets/emoji/CateGOMe_emoji_categorying.png"},
+        "emoji_sorry": {"url": "https://raw.githubusercontent.com/monodani/CateGOMe-TEST/main/assets/emoji/CateGOMe_emoji_sorry.png", "path": BASE_DIR / "assets/emoji/CateGOMe_emoji_sorry.png"}
     }
 
     # 2. 파일 다운로드 로직
