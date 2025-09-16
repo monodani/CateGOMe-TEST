@@ -612,7 +612,7 @@ JSON 스키마:
                         "품목명": pname, "입력코드": code, "항목명": item_name,
                         "수입": income_list[i], "지출": expense_list[i],
                         "신뢰도": r.get("confidence","N/A"),
-                        "추론 이유": r.get("reason","N/A"), "근거 정보": r.get("evidence","N/A")
+                        "추론 이유": r.get("reason","N/A"), "근거정보": r.get("evidence","N/A")
                     })
                 elif ctype == "AMBIGUOUS":
                     cands = llm.get("candidates", [])
@@ -621,7 +621,7 @@ JSON 스키마:
                     ambiguous_results.append({
                         "품목명": pname, "수입": income_list[i], "지출": expense_list[i],
                         "모호성 이유": llm.get("reason_for_ambiguity","N/A"),
-                        "후보": cands, "근거 정보": llm.get("evidence","N/A")
+                        "후보": cands, "근거정보": llm.get("evidence","N/A")
                     })
                 else:
                     failed_results.append({"품목명": pname, "수입": income_list[i], "지출": expense_list[i], "실패 이유": f"알 수 없는 타입: {ctype}"})
@@ -659,92 +659,85 @@ if results is not None:
     # --- (1) 명확하게 분류된 품목 ---
     if not df_definite.empty:
         st.markdown("### ✅ 명확하게 분류된 품목")
-
         view_def = df_definite.copy()
         view_def["수입(원)"] = view_def["수입"].apply(fmt_won)
         view_def["지출(원)"] = view_def["지출"].apply(fmt_won)
         view_def = view_def[["품목명", "입력코드", "항목명", "신뢰도", "수입(원)", "지출(원)"]]
-
         sty = (
             view_def
             .style
             .set_properties(subset=["수입(원)", "지출(원)"], **{"text-align": "right"})
         )
-
         # st.table은 Styler를 반영해 정렬이 먹음
         st.table(sty)
-
-results = st.session_state.get("results")
-if results is not None:
-    df_definite        = results["df_definite"]
-    ambiguous_results  = results["ambiguous_results"]
-    failed_results     = results["failed_results"]
     
-    st.markdown("---")
-
-    # --- (3) 입력코드별 요약 보기 (재계산 없이 캐시로부터) ---
+    # --- (2) 입력코드별 요약 보기 (재계산 없이 캐시로부터) ---
     if st.checkbox("입력코드별 요약 보기", key="show_summary"):
-        numeric_codes_mask = pd.to_numeric(df_definite['입력코드'], errors='coerce').notna()
-        df_summary = df_definite[numeric_codes_mask].copy()
-        if not df_summary.empty:
-            df_summary['입력코드'] = df_summary['입력코드'].astype(float).astype(int)
-            df_summary_agg = df_summary.groupby('입력코드').agg(
-                항목명=('항목명', 'first'),
-                수입합계=('수입', 'sum'),
-                지출합계=('지출', 'sum'),
-                해당품목명=('품목명', lambda x: ', '.join(x))
-            ).reset_index()
-
-            view_sum = df_summary_agg.copy()
-            view_sum["수입합계(원)"] = view_sum["수입합계"].apply(fmt_won)
-            view_sum["지출합계(원)"] = view_sum["지출합계"].apply(fmt_won)
-            view_sum = view_sum[['입력코드', '항목명', '수입합계(원)', '지출합계(원)', '해당품목명']]
+        if not df_definite.empty:
+            numeric_codes_mask = pd.to_numeric(df_definite['입력코드'], errors='coerce').notna()
+            df_summary = df_definite[numeric_codes_mask].copy()
             
-            h2 = min(44 * (len(view_sum) + 1), 500)
-            
-        sty2 = (
-            view_sum
-            .style
-            .set_properties(subset=["수입합계(원)", "지출합계(원)"], **{"text-align": "right"})
-        )
-
-        # st.table은 Styler를 반영해 정렬이 먹음
-        st.table(sty2)
-            
-            # --- (4) 명확한 분류에 대한 상세 근거 ---
-            with st.expander("🔎 명확한 분류에 대한 상세 근거", expanded=False):
-                for row in df_definite.to_dict(orient="records"):
-                    st.markdown(
-                        f"**품목명: {row['품목명']} (선택된 코드: {row['입력코드']}, "
-                        f"항목명: {row['항목명']}, 신뢰도: {row['신뢰도']})**"
-                    )
-                    if row.get("추론 이유"):
-                        st.write(f"**- 추론 이유:** {row['추론 이유']}")
-                    if row.get("근거 정보"):
-                        st.write("**- 핵심 근거:**")
-                        st.code(row["근거 정보"])
-                    st.markdown("---")
-
-        # --- (2) 사용자 검토가 필요한 품목 (컬럼명 한글화) ---
-        if ambiguous_results:
-            st.markdown("### ⚠️ 사용자 검토가 필요한 품목")
-            st.info("아래 품목들은 정보가 부족하여 단일 코드를 확정하지 못했습니다.")
-            for result in ambiguous_results:
-                with st.expander(f"📌 {result['품목명']} (수입: {fmt_won(result['수입'])}, 지출: {fmt_won(result['지출'])})"):
-                    st.write(f"**검토 필요 이유:** {result['모호성 이유']}")
-                    candidates_df = pd.DataFrame(result['후보']).rename(columns={
-                        "input_code": "입력코드",
-                        "confidence": "신뢰도",
-                        "reason": "근거 정보",
-                    })
-                    # 표시 컬럼 순서 고정
-                    view_cols = [c for c in ["입력코드", "항목명", "신뢰도", "근거 정보"] if c in candidates_df.columns]
-                    h3 = min(44 * (len(candidates_df) + 1), 400)
-                    st.dataframe(candidates_df[view_cols], use_container_width=True, height=h3, hide_index=True)
-
-        # (옵션) 실패 항목
-        if failed_results:
-            with st.expander("❌ 처리 실패 항목"):
-                df_failed = pd.DataFrame(failed_results)
-                h4 = min(44 * (len(df_failed) + 1), 400)
-                st.dataframe(df_failed, use_container_width=True, height=h4, hide_index=True)
+            if not df_summary.empty:
+                df_summary['입력코드'] = df_summary['입력코드'].astype(float).astype(int)
+                df_summary_agg = df_summary.groupby('입력코드').agg(
+                    항목명=('항목명', 'first'),
+                    수입합계=('수입', 'sum'),
+                    지출합계=('지출', 'sum'),
+                    해당품목명=('품목명', lambda x: ', '.join(x))
+                ).reset_index()
+                
+                view_sum = df_summary_agg.copy()
+                view_sum["수입합계(원)"] = view_sum["수입합계"].apply(fmt_won)
+                view_sum["지출합계(원)"] = view_sum["지출합계"].apply(fmt_won)
+                view_sum = view_sum[['입력코드', '항목명', '수입합계(원)', '지출합계(원)', '해당품목명']]
+                
+                sty2 = (
+                    view_sum
+                    .style
+                    .set_properties(subset=["수입합계(원)", "지출합계(원)"], **{"text-align": "right"})
+                )
+                # st.table은 Styler를 반영해 정렬이 먹음
+                st.table(sty2)
+            else:
+                st.warning("숫자 코드가 있는 항목이 없습니다.")
+        else:
+            st.warning("명확하게 분류된 품목이 없습니다.")
+    
+    # --- (3) 명확한 분류에 대한 상세 근거 ---
+    if not df_definite.empty:
+        with st.expander("🔎 명확한 분류에 대한 상세 근거", expanded=False):
+            for row in df_definite.to_dict(orient="records"):
+                st.markdown(
+                    f"**품목명: {row['품목명']} (선택된 코드: {row['입력코드']}, "
+                    f"항목명: {row['항목명']}, 신뢰도: {row['신뢰도']})**"
+                )
+                if row.get("추론 이유"):
+                    st.write(f"**- 추론 이유:** {row['추론 이유']}")
+                if row.get("근거정보"):
+                    st.write("**- 핵심 근거:**")
+                    st.code(row["근거정보"])
+                st.markdown("---")
+    
+    # --- (4) 사용자 검토가 필요한 품목 (컬럼명 한글화) ---
+    if ambiguous_results:
+        st.markdown("### ⚠️ 사용자 검토가 필요한 품목")
+        st.info("아래 품목들은 정보가 부족하여 단일 코드를 확정하지 못했습니다.")
+        for result in ambiguous_results:
+            with st.expander(f"📌 {result['품목명']} (수입: {fmt_won(result['수입'])}, 지출: {fmt_won(result['지출'])})"):
+                st.write(f"**검토 필요 이유:** {result['모호성 이유']}")
+                candidates_df = pd.DataFrame(result['후보']).rename(columns={
+                    "input_code": "입력코드",
+                    "confidence": "신뢰도",
+                    "reason": "근거정보",
+                })
+                # 표시 컬럼 순서 고정
+                view_cols = [c for c in ["입력코드", "항목명", "신뢰도", "근거정보"] if c in candidates_df.columns]
+                h3 = min(44 * (len(candidates_df) + 1), 400)
+                st.dataframe(candidates_df[view_cols], use_container_width=True, height=h3, hide_index=True)
+    
+    # --- (5) 실패 항목 ---
+    if failed_results:
+        with st.expander("❌ 처리 실패 항목"):
+            df_failed = pd.DataFrame(failed_results)
+            h4 = min(44 * (len(df_failed) + 1), 400)
+            st.dataframe(df_failed, use_container_width=True, height=h4, hide_index=True)
