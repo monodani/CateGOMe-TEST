@@ -40,7 +40,7 @@ from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from langchain_community.vectorstores import FAISS
 
 # Gemini 설정
-genai.configure(api_key=GOOGLE_API_KEY)
+genai.configure(api_key=GENAI_API_KEY)
 
 # ========================================
 # Streamlit 페이지 설정
