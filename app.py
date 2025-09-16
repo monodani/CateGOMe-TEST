@@ -465,13 +465,6 @@ with col2:
     </div>
     """, unsafe_allow_html=True)
 
-# 이미지 업로드
-uploaded_file = st.file_uploader(
-    "가계부 이미지를 업로드하세요",
-    type=['png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp', 'tiff'],
-    help="드래그 앤 드롭 또는 클릭하여 파일 선택"
-)
-
 # 세션 상태 기본값
 st.session_state.setdefault("ran_once", False)
 
@@ -482,15 +475,16 @@ uploaded_file = st.file_uploader(
     help="드래그 앤 드롭 또는 클릭하여 파일 선택"
 )
 
-# 세션 상태 기본값
-st.session_state.setdefault("ran_once", False)
 
-if uploaded_file is not None:
+if uploaded_file is not None:    
+    if st.session_state.get("last_file_name") != uploaded_file.name:
+        st.session_state["ran_once"] = False
+        st.session_state["last_file_name"] = uploaded_file.name
+    
     # 1) 버튼은 중앙 컬럼에만, 결과 렌더링은 컬럼 밖에서
     c1, c2, c3 = st.columns([2, 1, 2])
     with c2:
-        run = st.button("🚀 분류 시작", type="primary", use_container_width=True)
-
+        run = st.button("🚀 분류 시작", type="primary", use_container_width=True, key="run_btn_v1")  # 🔑 고유 키
     if run:
         st.session_state["ran_once"] = True
 
