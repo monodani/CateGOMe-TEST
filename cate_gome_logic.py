@@ -43,12 +43,12 @@ def load_all_data_and_models(openai_api_key: str):
         "classification_csv": {"url": "https://raw.githubusercontent.com/monodani/CateGOMe-TEST/main/data/classification_code.csv", "path": BASE_DIR / "data/classification_code.csv"},
         
         # <<< 이 부분이 누락되었던 이미지 파일 다운로드 목록입니다.
-        "logo_main": {"url": "https://raw.githubusercontent.com/monodani/CateGOMe-TEST/main/assets/CateGOMe/CateGOMe_kor.png", "path": BASE_DIR / "assets/CateGOMe_kor.png"},
+        "logo_main": {"url": "https://raw.githubusercontent.com/monodani/CateGOMe-TEST/main/assets/CateGOMe/CateGOMe_kor.png", "path": BASE_DIR / "assets/CateGOMe/CateGOMe_kor.png"},
         "emoji_hi": {"url": "https://raw.githubusercontent.com/monodani/CateGOMe-TEST/main/assets/emoji/CateGOMe_emoji_hi.png", "path": BASE_DIR / "assets/emoji/CateGOMe_emoji_hi.png"},
         "emoji_categorizing": {"url": "https://raw.githubusercontent.com/monodani/CateGOMe-TEST/main/assets/emoji/CateGOMe_emoji_categorying.png", "path": BASE_DIR / "assets/emoji/CateGOMe_emoji_categorying.png"},
         "emoji_sorry": {"url": "https://raw.githubusercontent.com/monodani/CateGOMe-TEST/main/assets/emoji/CateGOMe_emoji_sorry.png", "path": BASE_DIR / "assets/emoji/CateGOMe_emoji_sorry.png"}
     }
-
+    
     # 2. 파일 다운로드 로직
     for key, info in DATA_FILES.items():
         local_path = info["path"]
