@@ -94,10 +94,10 @@ def _keyword_search(df: pd.DataFrame, term: str) -> List[Document]:
         if c in df_copy.columns: df_copy[c] = df_copy[c].astype(str)
     
     mask = (
-        df_copy["항목분류내용"].str.contains(term, case=False, na=False) |
-        df_copy["항목명"].str.contains(term, case=False, na=False) |
-        df_copy["포함항목"].str.contains(term, case=False, na=False) |
-        df_copy["제외항목"].str.contains(term, case=False, na=False)
+        df_copy["항목분류내용"].str.contains(term, cases=False, na=False) |
+        df_copy["항목명"].str.contains(term, cases=False, na=False) |
+        df_copy["포함항목"].str.contains(term, cases=False, na=False) |
+        df_copy["제외항목"].str.contains(term, cases=False, na=False)
     )
     sub = df_copy.loc[mask].drop_duplicates(subset=["_rowid"], keep="first")
     return [_short_doc_from_row(r) for _, r in sub.iterrows()]
