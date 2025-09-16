@@ -1,11 +1,3 @@
-
----
-
-### **3단계: `app.py` 전체 교체**
-
-# `load_all_data_and_models` 함수를 호출하고, 그 결과를 `get_classification_report` 함수에 넘겨주기만 하면 됩니다. `use_container_width` 경고도 수정했습니다.
-
-# ```python
 # /app.py (FINAL VERSION - ALL-IN-ONE)
 
 import streamlit as st
