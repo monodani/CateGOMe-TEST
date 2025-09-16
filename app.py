@@ -665,14 +665,14 @@ if results is not None:
         view_def["지출(원)"] = view_def["지출"].apply(fmt_won)
         view_def = view_def[["품목명", "입력코드", "항목명", "신뢰도", "수입(원)", "지출(원)"]]
 
-        h = min(44 * (len(df_definite) + 1), 600)
-
-        st.dataframe(
-            view_def,
-            use_container_width=True,
-            height=h,
-            hide_index=True,
+        sty = (
+            view_def
+            .style
+            .set_properties(subset=["수입(원)", "지출(원)"], **{"text-align": "right"})
         )
+
+        # st.table은 Styler를 반영해 정렬이 먹음
+        st.table(sty)
 
 results = st.session_state.get("results")
 if results is not None:
@@ -702,12 +702,14 @@ if results is not None:
             
             h2 = min(44 * (len(view_sum) + 1), 500)
             
-            st.dataframe(
-                view_sum,
-                use_container_width=True,
-                height=h2,
-                hide_index=True,
-            )
+        sty2 = (
+            view_sum
+            .style
+            .set_properties(subset=["수입합계(원)", "지출합계(원)"], **{"text-align": "right"})
+        )
+
+        # st.table은 Styler를 반영해 정렬이 먹음
+        st.table(sty2)
             
             # --- (4) 명확한 분류에 대한 상세 근거 ---
             with st.expander("🔎 명확한 분류에 대한 상세 근거", expanded=False):
