@@ -694,7 +694,7 @@ if results is not None:
     st.markdown("## 📊 분류 결과")
 
     # --- (1) 명확하게 분류된 품목 ---
-    if not df_definite.empty:
+    # if not df_definite.empty:
         # (명확하게 분류된 품목을 표시하는 코드)
         # ...
 
