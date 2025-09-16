@@ -46,7 +46,7 @@ genai.configure(api_key=GENAI_API_KEY)
 # Streamlit 페이지 설정
 # ========================================
 st.set_page_config(
-    page_title="CateGOMe - 가계동향조사 자동분류 AI",
+    page_title="카테고미 - 통계청 항목자동분류AI",
     page_icon="📊",
     layout="wide"
 )
@@ -107,6 +107,8 @@ _embeddings, _vectorstores, _df, _llm_model = initialize_system()
 # ========================================
 # Colab 헬퍼 함수들 그대로
 # ========================================
+
+        
 def _short_doc_from_row(row: pd.Series) -> Document:
     """
     page_content는 토큰 낭비를 줄이기 위해 핵심 필드만.
@@ -447,6 +449,17 @@ classification_chain_single = (
     | StrOutputParser()
 )
 
+
+# === 표시용 포맷터: 천단위 콤마 + '원' ===
+def fmt_won(x):
+    try:
+        return f"{int(x):,} 원"
+    except Exception:
+        try:
+            return f"{int(float(x)):,} 원"
+        except Exception:
+            return "0 원"
+        
 # ========================================
 # Streamlit UI (심플하게)
 # ========================================
@@ -653,14 +666,23 @@ JSON 스키마:
             st.markdown("### ✅ 명확하게 분류된 품목")
 
             h = min(44 * (len(df_definite) + 1), 600)
+            view_def = df_definite.copy()
+            view_def["수입"] = view_def["수입"].map(fmt_won)
+            view_def["지출"] = view_def["지출"].map(fmt_won)
+
             st.dataframe(
+                view_def[["품목명", "입력코드", "항목명", "신뢰도", "수입", "지출"]],
+                    use_container_width=True,
+                    height=h,
+                    hide_index=True,
+                    column_config={
                 df_definite[["품목명", "입력코드", "항목명", "신뢰도", "수입", "지출"]],
                 use_container_width=True,
                 height=h,
                 hide_index=True,
                 column_config={
-                    "수입": st.column_config.NumberColumn(format="%d", step=1),
-                    "지출": st.column_config.NumberColumn(format="%d", step=1),
+                    "수입": st.column_config.TextColumn(),
+                    "지출": st.column_config.TextColumn(),
                     "입력코드": st.column_config.TextColumn(),
                     "신뢰도": st.column_config.TextColumn(),
                 },
@@ -678,15 +700,21 @@ JSON 스키마:
                         지출합계=('지출', 'sum'),
                         해당품목명=('품목명', lambda x: ', '.join(x))
                     ).reset_index()
-                    h2 = min(44 * (len(df_summary_agg) + 1), 500)
+
+                    # 교체 (표시용 복사본 + 문자열 포맷으로 렌더링)
+                    view_sum = df_summary_agg.copy()
+                    view_sum["수입합계"] = view_sum["수입합계"].map(fmt_won)
+                    view_sum["지출합계"] = view_sum["지출합계"].map(fmt_won)
+                    
+                    h2 = min(44 * (len(view_sum) + 1), 500)
                     st.dataframe(
-                        df_summary_agg[['입력코드', '항목명', '수입합계', '지출합계', '해당품목명']],
+                        view_sum[['입력코드', '항목명', '수입합계', '지출합계', '해당품목명']],
                         use_container_width=True,
                         height=h2,
                         hide_index=True,
                         column_config={
-                            "수입합계": st.column_config.NumberColumn(format="%d", step=1),
-                            "지출합계": st.column_config.NumberColumn(format="%d", step=1),
+                            "수입합계": st.column_config.TextColumn(),
+                            "지출합계": st.column_config.TextColumn(),
                         },
                     )
 
@@ -709,7 +737,7 @@ JSON 스키마:
             st.markdown("### ⚠️ 사용자 검토가 필요한 품목")
             st.info("아래 품목들은 정보가 부족하여 단일 코드를 확정하지 못했습니다.")
             for result in ambiguous_results:
-                with st.expander(f"📌 {result['품목명']} (수입: {result['수입']:,}, 지출: {result['지출']:,})"):
+                with st.expander(f"📌 {result['품목명']} (수입: {fmt_won(result['수입'])}, 지출: {fmt_won(result['지출'])})"):
                     st.write(f"**검토 필요 이유:** {result['모호성 이유']}")
                     candidates_df = pd.DataFrame(result['후보']).rename(columns={
                         "input_code": "입력코드",
