@@ -472,229 +472,189 @@ uploaded_file = st.file_uploader(
     help="드래그 앤 드롭 또는 클릭하여 파일 선택"
 )
 
-# 분류 시작 버튼
-if uploaded_file is not None and (run or st.session_state.get("ran_once")):
+# 세션 상태 기본값
+st.session_state.setdefault("ran_once", False)
+
+# 이미지 업로드
+uploaded_file = st.file_uploader(
+    "가계부 이미지를 업로드하세요",
+    type=['png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp', 'tiff'],
+    help="드래그 앤 드롭 또는 클릭하여 파일 선택"
+)
+
+# 세션 상태 기본값
+st.session_state.setdefault("ran_once", False)
+
+if uploaded_file is not None:
+    # 1) 버튼은 중앙 컬럼에만, 결과 렌더링은 컬럼 밖에서
+    c1, c2, c3 = st.columns([2, 1, 2])
+    with c2:
+        run = st.button("🚀 분류 시작", type="primary", use_container_width=True)
+
     if run:
         st.session_state["ran_once"] = True
-    with col2:
-        run = st.button("🚀 분류 시작", type="primary", use_container_width=True)
-            
-            progress = st.progress(0, "이미지 분석 준비 중...")
-            
-            # ========================================
-            # Colab 메인 실행 코드 그대로
-            # ========================================
-            img = Image.open(uploaded_file).convert("RGB")
-            
-            progress.progress(20, "📸 이미지에서 텍스트 추출 중...")
-            
-            gemini_model = genai.GenerativeModel("gemini-1.5-flash")
-            
-            prompt = """
-    가계부 사진에서 표를 인식해서 각 행의
-    1) 품목명(= '수입종류 및 지출의 품명과 용도' 열),
-    2) 수입 금액,
-    3) 지출 금액
-    을 추출하라.
 
-    규칙:
-    - 금액의 쉼표(,)는 제거하고 정수로.
-    - 값이 비어 있으면 0으로.
-    - 제목행·체크박스·빈줄은 제외.
-    - 반드시 아래 JSON 스키마로만 출력.
+    # 2) 실행 블록
+    if st.session_state["ran_once"]:
+        progress = st.progress(0, "이미지 분석 준비 중...")
 
-    JSON 스키마:
-    {
-      "items": [
-        {"name": "품목명", "income": 0, "expense": 0},
-        ...
-      ]
-    }
-    """
+        # ---- 기존 파이프라인 그대로 (OCR → 검색 → LLM) ----
+        img = Image.open(uploaded_file).convert("RGB")
+        progress.progress(20, "📸 이미지에서 텍스트 추출 중...")
 
-            # Gemini로 OCR
-            img_bytes = uploaded_file.getvalue()
-            resp = gemini_model.generate_content(
-                [{"text": prompt}, {"inline_data": {"mime_type": uploaded_file.type, "data": img_bytes}}],
-                generation_config={"response_mime_type": "application/json"}
+        gemini_model = genai.GenerativeModel("gemini-1.5-flash")
+        prompt = """
+        가계부 사진에서 표를 인식해서 각 행의
+        1) 품목명(= '수입종류 및 지출의 품명과 용도' 열),
+        2) 수입 금액,
+        3) 지출 금액
+        을 추출하라.
+        규칙:
+        - 금액의 쉼표(,)는 제거하고 정수로.
+        - 값이 비어 있으면 0으로.
+        - 제목행·체크박스·빈줄은 제외.
+        - 반드시 아래 JSON 스키마로만 출력.
+        JSON 스키마:
+        { "items": [ {"name": "품목명", "income": 0, "expense": 0} ] }
+        """
+
+        img_bytes = uploaded_file.getvalue()
+        resp = gemini_model.generate_content(
+            [{"text": prompt}, {"inline_data": {"mime_type": uploaded_file.type, "data": img_bytes}}],
+            generation_config={"response_mime_type": "application/json"}
+        )
+        data = json.loads(resp.text)
+
+        # 후처리
+        items = []
+        for it in data.get("items", []):
+            name = str(it.get("name", "")).strip()
+            def to_int(x):
+                s = str(x).replace(",", "").strip()
+                return int(re.sub(r"[^\d]", "", s)) if re.search(r"\d", s) else 0
+            income  = to_int(it.get("income", 0))
+            expense = to_int(it.get("expense", 0))
+            if name:
+                items.append({"name": name, "income": income, "expense": expense})
+
+        product_name_list = [it["name"] for it in items]
+        income_list       = [it["income"] for it in items]
+        expense_list      = [it["expense"] for it in items]
+
+        progress.progress(30, f"✅ {len(items)}개 품목 발견")
+
+        # 코드→항목명 맵
+        _df['입력코드_str'] = _df['입력코드'].astype(str).str.replace(r'\.0$', '', regex=True)
+        code_to_name_map = pd.Series(_df.항목명.values, index=_df.입력코드_str).to_dict()
+
+        # 벡터스토어 문서 메모리 로드
+        all_docs_from_vs = {name: list(vs.docstore._dict.values()) for name, vs in _vectorstores.items()}
+
+        # 결과 컨테이너
+        definite_results, ambiguous_results, failed_results = [], [], []
+
+        total = max(len(product_name_list), 1)
+        for i, pname_orig in enumerate(product_name_list):
+            progress.progress(30 + int(60 * (i + 1) / total), f"🔍 분류 중... ({i+1}/{total}) - {pname_orig}")
+
+            q_single = f"product_name = ['{pname_orig}'], income = [{income_list[i]}], expense = [{expense_list[i]}]"
+            search_output = search_classification_codes(q_single, all_docs_from_vs, sim_topk_per_term=3, num_related_terms=3)
+            pname = (search_output.get("extracted_terms_info") or [{"term": pname_orig}])[0]["term"]
+
+            if "error" in search_output or not search_output["context_docs"]:
+                failed_results.append({"품목명": pname, "수입": income_list[i], "지출": expense_list[i], "실패 이유": "검색 결과 없음"})
+                continue
+
+            context = "\n\n---\n\n".join([d.page_content for d in search_output["context_docs"]])
+            context = context.replace("출처: cases", "출처: 조사사례집").replace("출처: classification", "출처: 항목분류집")
+
+            final_question = f"product_name = ['{pname}'], income = [{income_list[i]}], expense = [{expense_list[i]}]"
+            input_data = {"question": final_question, "context": context}
+
+            try:
+                out_str = classification_chain_single.invoke(input_data)
+                m = re.search(r'\{.*\}', out_str, re.DOTALL)
+                llm = json.loads(m.group(0)) if m else {}
+                ctype = llm.get("classification_type")
+
+                if ctype == "DEFINITE":
+                    r = llm.get("result", {})
+                    code = str(r.get("input_code", "")).strip()
+                    item_name = code_to_name_map.get(code, "항목명 없음")
+                    definite_results.append({
+                        "품목명": pname, "입력코드": code, "항목명": item_name,
+                        "수입": income_list[i], "지출": expense_list[i],
+                        "신뢰도": r.get("confidence","N/A"),
+                        "추론 이유": r.get("reason","N/A"), "근거 정보": r.get("evidence","N/A")
+                    })
+                elif ctype == "AMBIGUOUS":
+                    cands = llm.get("candidates", [])
+                    for c in cands:
+                        c["항목명"] = code_to_name_map.get(str(c.get("input_code","")).strip(), "항목명 없음")
+                    ambiguous_results.append({
+                        "품목명": pname, "수입": income_list[i], "지출": expense_list[i],
+                        "모호성 이유": llm.get("reason_for_ambiguity","N/A"),
+                        "후보": cands, "근거 정보": llm.get("evidence","N/A")
+                    })
+                else:
+                    failed_results.append({"품목명": pname, "수입": income_list[i], "지출": expense_list[i], "실패 이유": f"알 수 없는 타입: {ctype}"})
+            except Exception as e:
+                failed_results.append({"품목명": pname, "수입": income_list[i], "지출": expense_list[i], "실패 이유": str(e)})
+
+        progress.progress(100, "✅ 분류 완료!")
+        st.markdown("---")
+        st.markdown("## 📊 분류 결과")
+
+        # === Part 1: 명확 ===
+        if definite_results:
+            st.markdown("### ✅ 명확하게 분류된 품목")
+            df_definite = pd.DataFrame(definite_results)
+            cols = ["품목명", "입력코드", "항목명", "신뢰도", "수입", "지출"]
+            h = min(44 * (len(df_definite) + 1), 600)
+            st.dataframe(
+                df_definite[cols],
+                use_container_width=True, height=h, hide_index=True,
+                column_config={
+                    "수입": st.column_config.NumberColumn(format="%,d"),
+                    "지출": st.column_config.NumberColumn(format="%,d"),
+                },
             )
 
-            raw = resp.text
-            data = json.loads(raw)
+            if st.checkbox("입력코드별 요약 보기"):
+                numeric = pd.to_numeric(df_definite['입력코드'], errors='coerce').notna()
+                df_summary = df_definite[numeric].copy()
+                if not df_summary.empty:
+                    df_summary['입력코드'] = df_summary['입력코드'].astype(float).astype(int)
+                    df_agg = df_summary.groupby('입력코드').agg(
+                        항목명=('항목명','first'),
+                        수입합계=('수입','sum'),
+                        지출합계=('지출','sum'),
+                        해당품목명=('품목명', lambda x: ', '.join(x)),
+                    ).reset_index()
+                    h2 = min(44 * (len(df_agg) + 1), 500)
+                    st.dataframe(
+                        df_agg[['입력코드','항목명','수입합계','지출합계','해당품목명']],
+                        use_container_width=True, height=h2, hide_index=True,
+                        column_config={
+                            "수입합계": st.column_config.NumberColumn(format="%,d"),
+                            "지출합계": st.column_config.NumberColumn(format="%,d"),
+                        },
+                    )
 
-            # 후처리: 숫자/문자 보정(예외 대비)
-            items = []
-            for it in data.get("items", []):
-                name = str(it.get("name", "")).strip()
-                def to_int(x):
-                    s = str(x).replace(",", "").strip()
-                    return int(re.sub(r"[^\d]", "", s)) if re.search(r"\d", s) else 0
-                income = to_int(it.get("income", 0))
-                expense = to_int(it.get("expense", 0))
-                if name:
-                    items.append({"name": name, "income": income, "expense": expense})
+        # === Part 2: 검토 필요 ===
+        if ambiguous_results:
+            st.markdown("### ⚠️ 사용자 검토가 필요한 품목")
+            st.info("아래 품목들은 정보가 부족하여 단일 코드를 확정하지 못했습니다.")
+            for r in ambiguous_results:
+                with st.expander(f"📌 {r['품목명']} (수입: {r['수입']:,}, 지출: {r['지출']:,})"):
+                    st.write(f"**검토 필요 이유:** {r['모호성 이유']}")
+                    cand = pd.DataFrame(r['후보'])
+                    h3 = min(44 * (len(cand) + 1), 400)
+                    st.dataframe(cand, use_container_width=True, height=h3, hide_index=True)
 
-            product_name_list = [it["name"] for it in items]
-            income_list = [it["income"] for it in items]
-            expense_list = [it["expense"] for it in items]
-
-            progress.progress(30, f"✅ {len(items)}개 품목 발견")
-
-            # --- 입력코드와 항목명을 매핑하는 딕셔너리 생성 ---
-            _df['입력코드_str'] = _df['입력코드'].astype(str).str.replace(r'\.0$', '', regex=True)
-            code_to_name_map = pd.Series(_df.항목명.values, index=_df.입력코드_str).to_dict()
-
-            # 2. 문서 목록 미리 로드
-            all_docs_from_vs = {name: list(vs.docstore._dict.values()) for name, vs in _vectorstores.items()}
-
-            # 3. 개별 품목 처리 루프
-            # --- 결과를 세 종류로 나누어 저장할 리스트 초기화 ---
-            definite_results = []
-            ambiguous_results = []
-            failed_results = []
-
-            total = len(product_name_list)
-            for i, product_name_original in enumerate(product_name_list):
-                progress.progress(
-                    30 + int(60 * (i + 1) / total),
-                    f"🔍 분류 중... ({i+1}/{total}) - {product_name_original}"
-                )
-
-                # --- 수입/지출 정보를 포함하여 단일 쿼리 생성 ---
-                q_single = (f"product_name = ['{product_name_original}'], "
-                           f"income = [{income_list[i]}], expense = [{expense_list[i]}]")
-
-                search_output = search_classification_codes(q_single, all_docs_from_vs, sim_topk_per_term=3, num_related_terms=3)
-
-                try:
-                    product_name_corrected = search_output["extracted_terms_info"][0]["term"]
-                except (IndexError, KeyError):
-                    product_name_corrected = product_name_original
-
-                if "error" in search_output or not search_output["context_docs"]:
-                    failed_results.append({"품목명": product_name_corrected, "수입": income_list[i], "지출": expense_list[i], "실패 이유": "검색 결과 없음"})
-                    continue
-
-                context_docs = search_output["context_docs"]
-                context = "\n\n---\n\n".join([doc.page_content for doc in context_docs])
-                context = context.replace("출처: cases", "출처: 조사사례집").replace("출처: classification", "출처: 항목분류집")
-
-                # --- 수입/지출 정보를 포함한 최종 질문 생성 ---
-                final_question = (f"product_name = ['{product_name_corrected}'], "
-                                 f"income = [{income_list[i]}], expense = [{expense_list[i]}]")
-                input_data = {"question": final_question, "context": context}
-
-                try:
-                    output_json_str = classification_chain_single.invoke(input_data)
-                    json_match = re.search(r'\{.*\}', output_json_str, re.DOTALL)
-                    if not json_match:
-                        raise ValueError(f"LLM 응답에서 JSON 객체를 찾지 못했습니다.")
-
-                    llm_result = json.loads(json_match.group(0))
-                    classification_type = llm_result.get("classification_type")
-
-                    # --- LLM 결과에 따라 분기 처리 ---
-                    if classification_type == "DEFINITE":
-                        result = llm_result.get("result", {})
-                        input_code = str(result.get("input_code", "파싱 실패")).strip()
-                        # --- [추가] 항목명 찾아오기 ---
-                        item_name = code_to_name_map.get(input_code, "항목명 없음")
-
-                        definite_results.append({
-                            "품목명": product_name_corrected,
-                            "입력코드": str(result.get("input_code", "파싱 실패")).strip(),
-                            "항목명": item_name,
-                            "수입": income_list[i], "지출": expense_list[i],
-                            "신뢰도": result.get("confidence", "N/A"),
-                            "추론 이유": result.get("reason", "N/A"),
-                            "근거 정보": result.get("evidence", "N/A")
-                        })
-                    elif classification_type == "AMBIGUOUS":
-                        candidates = llm_result.get("candidates", [])
-                        for cand in candidates:
-                            cand_code = str(cand.get("input_code", "")).strip()
-                            cand['항목명'] = code_to_name_map.get(cand_code, "항목명 없음")
-
-                        ambiguous_results.append({
-                            "품목명": product_name_corrected,
-                            "수입": income_list[i], "지출": expense_list[i],
-                            "모호성 이유": llm_result.get("reason_for_ambiguity", "N/A"),
-                            "후보": llm_result.get("candidates", []),
-                            "근거 정보": llm_result.get("evidence", "N/A")
-                        })
-                    else:
-                        raise ValueError(f"알 수 없는 classification_type: {classification_type}")
-
-                except Exception as e:
-                    failed_results.append({"품목명": product_name_corrected, "수입": income_list[i], "지출": expense_list[i], "실패 이유": str(e)})
-
-            progress.progress(100, "✅ 분류 완료!")
-
-            # --- 4. 최종 결과 취합 및 보고서 생성 ---
-            st.markdown("---")
-            st.markdown("## 📊 분류 결과")
-
-            # --- Part 1: 명확하게 분류된 품목 ---
-            if definite_results:
-                st.markdown("### ✅ 명확하게 분류된 품목")
-                df_definite = pd.DataFrame(definite_results)
-                cols = ["품목명", "입력코드", "항목명", "신뢰도", "수입", "지출"]
-
-                # 행수 기준으로 표 높이 동적 설정 (최대 600px)
-                h = min(44 * (len(df_definite) + 1), 600)
-
-        st.dataframe(
-            df_definite[cols],
-            use_container_width=True,
-            height=h,
-            hide_index=True,
-            column_config={
-                "수입": st.column_config.NumberColumn(format="%,d"),
-                "지출": st.column_config.NumberColumn(format="%,d"),
-                "입력코드": st.column_config.TextColumn(),
-                "신뢰도": st.column_config.TextColumn(),
-            },
-        )
-
-        if st.checkbox("입력코드별 요약 보기"):
-            numeric_codes_mask = pd.to_numeric(df_definite['입력코드'], errors='coerce').notna()
-            df_summary = df_definite[numeric_codes_mask].copy()
-            if not df_summary.empty:
-                df_summary['입력코드'] = df_summary['입력코드'].astype(float).astype(int)
-                df_summary_agg = df_summary.groupby('입력코드').agg(
-                    항목명=('항목명', 'first'),
-                    수입합계=('수입', 'sum'),
-                    지출합계=('지출', 'sum'),
-                    해당품목명=('품목명', lambda x: ', '.join(x)),
-                ).reset_index()
-
-                h2 = min(44 * (len(df_summary_agg) + 1), 500)
-                
-                st.dataframe(
-                    df_summary_agg[['입력코드', '항목명', '수입합계', '지출합계', '해당품목명']],
-                    use_container_width=True,
-                    height=h2,
-                    hide_index=True,
-                    column_config={
-                        "수입합계": st.column_config.NumberColumn(format="%,d"),
-                        "지출합계": st.column_config.NumberColumn(format="%,d"),
-                    },
-                )
-
-    # === Part 2: 사용자 검토가 필요한 품목 ===
-    if ambiguous_results:
-        st.markdown("### ⚠️ 사용자 검토가 필요한 품목")
-        st.info("아래 품목들은 정보가 부족하여 단일 코드를 확정하지 못했습니다.")
-        for result in ambiguous_results:
-            with st.expander(f"📌 {result['품목명']} (수입: {result['수입']:,}, 지출: {result['지출']:,})"):
-                st.write(f"**검토 필요 이유:** {result['모호성 이유']}")
-                candidates_df = pd.DataFrame(result['후보'])
-                h3 = min(44 * (len(candidates_df) + 1), 400)
-                st.dataframe(candidates_df, use_container_width=True, height=h3, hide_index=True)
-
-    # === Part 3: 처리 실패 ===
-    if failed_results:
-        with st.expander("❌ 처리 실패 항목"):
-            df_failed = pd.DataFrame(failed_results)
-            h4 = min(44 * (len(df_failed) + 1), 400)
-            st.dataframe(df_failed, use_container_width=True, height=h4, hide_index=True)
+        # === Part 3: 실패 ===
+        if failed_results:
+            with st.expander("❌ 처리 실패 항목"):
+                df_failed = pd.DataFrame(failed_results)
+                h4 = min(44 * (len(df_failed) + 1), 400)
+                st.dataframe(df_failed, use_container_width=True, height=h4, hide_index=True)
