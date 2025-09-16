@@ -121,17 +121,10 @@ if uploaded_file is not None:
                 st.error(f"오류 상세 내용: {e}")
 
 st.markdown("---")
-st.subheader("분석결과 로그")
 
-if not st.session_state.results_log:
-    st.info("아직 분석한 내역이 없어요. 이미지를 업로드하고 '분류시작' 버튼을 눌러주세요!")
-else:
-    for i, report_md in enumerate(st.session_state.results_log):
-        with st.expander(f"결과 로그 #{len(st.session_state.results_log) - i} (클릭하여 확인)", expanded=(i==0)):
-            st.markdown(report_md, unsafe_allow_html=True)
 
 # 5. 누적된 결과 로그 출력
-st.subheader("분석 결과 로그")
+st.subheader("분석결과 로그")
 if not st.session_state.results_log:
     st.info("아직 분류한 내역이 없어요. 이미지를 업로드하고 '분류시작' 버튼을 눌러주세요!")
 else:
