@@ -673,6 +673,8 @@ if results is not None:
         # st.dataframe 호출 부분을 수정했습니다.
         st.dataframe(
             view_def[["품목명", "입력코드", "항목명", "신뢰도", "수입", "지출"]],
+            sty = view_def.style.set_properties(subset=["수입","지출"], **{"text-align":"right"})
+            st.dataframe(sty, use_container_width=True, height=h, hide_index=True)
             use_container_width=True,
             height=h,
             hide_index=True,
@@ -722,6 +724,10 @@ if results is not None:
             view_sum["지출합계"] = view_sum["지출합계"].map(fmt_won)
             
             h2 = min(44 * (len(view_sum) + 1), 500)
+
+            sty = view_def.style.set_properties(subset=["수입","지출"], **{"text-align":"right"})
+            st.dataframe(sty, use_container_width=True, height=h, hide_index=True)
+            
             st.dataframe(
                 view_sum[['입력코드', '항목명', '수입합계', '지출합계', '해당품목명']],
                 use_container_width=True,
