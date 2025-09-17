@@ -595,7 +595,7 @@ JSON 스키마:
             progress.progress(30 + int(60 * (i + 1) / total), f"🔍 분류 중... ({i+1}/{total}) - {pname_orig}")
 
             q_single = f"product_name = ['{pname_orig}'], income = [{income_list[i]}], expense = [{expense_list[i]}]"
-            search_output = search_classification_codes(q_single, all_docs_from_vs, sim_topk_per_term=3, num_related_terms=3)
+            search_output = search_classification_codes(q_single, all_docs_from_vs, sim_topk_per_term=3, num_related_terms=4)
             pname = (search_output.get("extracted_terms_info") or [{"term": pname_orig}])[0]["term"]
 
             if "error" in search_output or not search_output["context_docs"]:
