@@ -1,5 +1,5 @@
 # ========================================
-# 🔧 설정값 (Colab 코드 그대로)
+# 🔧 설정값
 # ========================================
 import streamlit as st
 
@@ -20,7 +20,7 @@ CSV_PATH = "data/classification_code.csv"
 REQUIRED_COLS = ["항목명", "입력코드", "처리코드", "항목분류내용", "포함항목", "제외항목"]
 
 # ========================================
-# 📦 라이브러리 임포트 (Colab 코드 그대로)
+# 📦 라이브러리 임포트
 # ========================================
 import os
 import re
@@ -124,7 +124,7 @@ def _short_doc_from_row(row: pd.Series) -> Document:
     for col in core_fields_order:
         value = row[col]
 
-        # '입력코드' 컬럼일 경우, 정수로 변환을 시도합니다.
+        # '입력코드' 컬럼일 경우, 정수로 변환을 시도
         if col == "입력코드":
             try:
                 # float으로 먼저 변환 후 int로 변환하여 "720.0" 같은 문자열도 처리
@@ -191,7 +191,7 @@ def _get_term_info_via_llm(llm: ChatOpenAI, user_query: str, num_related_terms: 
     if llm is None:
         return []
 
-    # === 품목 설명 및 관련어 반환 프롬프트 (Colab 그대로) ===
+    # === 품목 설명 및 관련어 반환 프롬프트 ===
     prompt = f"""
 너는 **사용자의 가계부에서 추출된 정보**로 구성된 쿼리에서 'product_name' 리스트에 포함된 모든 품목명을 분석하고, 오탈자를 교정한 뒤 검색에 유용한 정보를 추출하는 전문가 AI이다.
 **쿼리에 포함된 정보의 출처가 가계부**라는 것을 반드시 유념해서 **가계부의 수입, 지출 항목에 대한 것임을 고려하여** 아래의 작업절차를 준수해야 한다.
@@ -274,7 +274,7 @@ def _get_term_info_via_llm(llm: ChatOpenAI, user_query: str, num_related_terms: 
         # 폴백 로직
         return [{"term": user_query, "description": "", "related_terms": []}]
 
-# search_classification_codes 함수 (Colab 그대로)
+# search_classification_codes 함수 
 def search_classification_codes(
     user_query: str,
     all_docs_from_vs: Dict[str, List[Document]],  # 파라미터
@@ -370,7 +370,7 @@ def search_classification_codes(
         "context_docs": unique_docs_objects  # GPT에 전달할 최종 중복 제거된 Document 객체 목록
     }
 
-# prompt_template_single (Colab 프롬프트 그대로 사용)
+# prompt_template_single
 prompt_template_single = PromptTemplate.from_template("""
     SYSTEM: 당신은 **가계부로부터 추출된** 주어진 데이터를 분석하여 가장 적합한 '입력코드'와 '항목명'을 추론하는, 극도로 꼼꼼하고 규칙을 엄수하는 데이터 분류 AI이며, 당신의 이름은 "카테고미(CateGOMe)"입니다. 당신의 답변은 반드시 지정된 JSON 형식이어야 합니다.
     
@@ -527,7 +527,7 @@ if uploaded_file is not None:
         progress = st.progress(0, "이미지 분석 준비 중...")
 
         # --- 여기는 기존 파이프라인 그대로 (OCR → 검색 → LLM) ---
-        #     단, 마지막에 df_definite / ambiguous_results / failed_results만 저장해주면 됩니다.
+        #     단, 마지막에 df_definite / ambiguous_results / failed_results만 저장
         img = Image.open(uploaded_file).convert("RGB")
         progress.progress(20, "📸 이미지에서 텍스트 추출 중...")
 
@@ -643,7 +643,7 @@ JSON 스키마:
             except Exception as e:
                 failed_results.append({"품목명": pname, "수입": income_list[i], "지출": expense_list[i], "실패 이유": str(e)})
 
-        # ----- DataFrame 생성 및 숫자형으로 강제(⚠️ 제거 핵심) -----
+        # ----- DataFrame 생성 및 숫자형으로 강제(⚠️제거 핵심) -----
         df_definite = pd.DataFrame(definite_results)
         if not df_definite.empty:
             for col in ["수입", "지출"]:
