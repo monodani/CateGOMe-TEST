@@ -19,6 +19,14 @@ CSV_PATH = "data/classification_code.csv"
 
 REQUIRED_COLS = ["항목명", "입력코드", "처리코드", "항목분류내용", "포함항목", "제외항목"]
 
+
+# ========================================
+# 🎨 UI 설정값 (관리자가 코드에서 직접 조절)
+# ========================================
+CAPTION_FONT_MULTIPLIER = 2.0  # 설명 문구 폰트 크기 배수 (1.0 = 기본, 2.0 = 2배)
+CAPTION_BASE_FONT_SIZE = 16    # 기본 폰트 크기 (픽셀)
+
+
 # ========================================
 # 📦 라이브러리 임포트
 # ========================================
@@ -47,9 +55,11 @@ genai.configure(api_key=GENAI_API_KEY)
 # ========================================
 # Streamlit 페이지 설정
 # ========================================
+icon = Image.open("assets/CateGOME_emoji.svg")
+
 st.set_page_config(
-    page_title="카테고미 - 통계청 항목자동분류AI",
-    page_icon="📊",
+    page_title="카테고미-통계청 항목자동분류AI",
+    page_icon=icon,
     layout="wide"
 )
 
@@ -475,24 +485,91 @@ def format_extra(t):
 # ========================================
 # Streamlit UI (심플하게)
 # ========================================
-# 헤더
-# 전역 어느 곳(예: 페이지 설정 아래)에 CSS 주입
-st.markdown("""
+# CSS 스타일 - 중앙 정렬과 세련된 디자인
+st.markdown(f"""
 <style>
-.categome-center { display:flex; justify-content:center; align-items:center; }
-.categome-caption { text-align:center; color:#666; margin-bottom:30px; }
+/* 로고 중앙 정렬 */
+.categome-logo-container {{
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    margin-bottom: 20px;
+}}
+
+/* 설명 문구 스타일 */
+.categome-caption {{
+    text-align: center;
+    color: #666;
+    margin-bottom: 40px;
+    font-size: {CAPTION_BASE_FONT_SIZE * CAPTION_FONT_MULTIPLIER}px;
+    line-height: 1.6;
+}}
+
+/* 입력 테이블 스타일링 */
+.input-table-container {{
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    padding: 2px;
+    border-radius: 10px;
+    margin: 20px 0;
+}}
+
+.input-table-inner {{
+    background: white;
+    border-radius: 8px;
+    padding: 20px;
+}}
+
+.input-header {{
+    font-weight: 600;
+    color: #333;
+    padding: 10px 0;
+    border-bottom: 2px solid #f0f0f0;
+    margin-bottom: 10px;
+}}
+
+/* 버튼 스타일 */
+.stButton > button {{
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border: none;
+    padding: 10px 30px;
+    font-size: 16px;
+    font-weight: 600;
+    border-radius: 25px;
+    transition: all 0.3s ease;
+}}
+
+.stButton > button:hover {{
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+}}
+
+/* 입력 필드 스타일 */
+.stTextInput > div > div > input {{
+    border-radius: 8px;
+    border: 1px solid #e0e0e0;
+    padding: 8px 12px;
+}}
+
+.stNumberInput > div > div > input {{
+    border-radius: 8px;
+    border: 1px solid #e0e0e0;
+    padding: 8px 12px;
+}}
 </style>
 """, unsafe_allow_html=True)
 
-# 헤더
-st.markdown('<div class="categome-center">', unsafe_allow_html=True)
-if os.path.exists("assets/CateGOMe_kor.png"):
-    st.image("assets/CateGOMe_kor.png", width=420)
-else:
-    st.title("🤖 CateGOMe")
-st.markdown('</div>', unsafe_allow_html=True)
+# 로고 중앙 정렬
+col1, col2, col3 = st.columns([1, 2, 1])
+with col2:
+    if os.path.exists("assets/CateGOMe_kor.png"):
+        st.image("assets/CateGOMe_kor.png", width=420)
+    else:
+        st.markdown("<h1 style='text-align: center;'>🤖 CateGOMe</h1>", unsafe_allow_html=True)
 
-st.markdown("""
+# 설명 문구
+st.markdown(f"""
 <div class="categome-caption">
 가계동향조사 항목코드 자동분류 AI챗봇 카테고미입니다!<br>
 가계부 이미지를 업로드해주시면 자동으로 품목을 분류해드리겠습니다.
@@ -504,13 +581,15 @@ st.markdown("""
 # ----------------------------------------------------------
 st.session_state.setdefault("results", None)        # 전체 결과 캐시
 st.session_state.setdefault("last_file_name", None) # 업로드 파일 변경 감지
+st.session_state.setdefault("manual_input", [])  # 수동 입력 데이터
 
-# === 업로더(유일) ===
+# === 업로더 ===
+st.markdown("### 📷 이미지 업로드")
 uploaded_file = st.file_uploader(
-    "가계부 이미지를 업로드하세요",
+    "가계부 이미지를 선택하세요",
     type=['png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp', 'tiff'],
     help="드래그 앤 드롭 또는 클릭하여 파일 선택",
-    key="main_uploader_v2",
+    key="main_uploader_v3",
 )
 
 # 파일 바뀌면 결과 초기화
@@ -518,29 +597,93 @@ if uploaded_file is not None and st.session_state["last_file_name"] != uploaded_
     st.session_state["results"] = None
     st.session_state["last_file_name"] = uploaded_file.name
 
+# === 수동 입력 테이블 (세련된 디자인) ===
+st.markdown("### ✏️ 직접 입력하기")
+st.markdown("이미지 업로드 대신 또는 함께 직접 품목을 입력할 수 있습니다.")
+
+# 입력 테이블 컨테이너
+with st.container():
+    st.markdown('<div class="input-table-container"><div class="input-table-inner">', unsafe_allow_html=True)
+    
+    # 헤더 행
+    cols = st.columns([3, 2, 2])
+    cols[0].markdown('<div class="input-header">📦 품목명</div>', unsafe_allow_html=True)
+    cols[1].markdown('<div class="input-header">💰 수입</div>', unsafe_allow_html=True)
+    cols[2].markdown('<div class="input-header">💸 지출</div>', unsafe_allow_html=True)
+    
+    # 입력 행들
+    manual_items = []
+    for i in range(5):
+        cols = st.columns([3, 2, 2])
+        with cols[0]:
+            name = st.text_input(
+                f"품목 {i+1}", 
+                key=f"name_{i}", 
+                placeholder=f"품목 {i+1}",
+                label_visibility="collapsed"
+            )
+        with cols[1]:
+            income = st.number_input(
+                f"수입 {i+1}", 
+                min_value=0, 
+                value=0, 
+                key=f"income_{i}",
+                label_visibility="collapsed",
+                placeholder="0"
+            )
+        with cols[2]:
+            expense = st.number_input(
+                f"지출 {i+1}", 
+                min_value=0, 
+                value=0, 
+                key=f"expense_{i}",
+                label_visibility="collapsed",
+                placeholder="0"
+            )
+        
+        if name:  # 품목명이 입력된 경우만 추가
+            manual_items.append({"name": name.strip(), "income": income, "expense": expense})
+    
+    st.markdown('</div></div>', unsafe_allow_html=True)
+
+# 세션에 저장
+st.session_state["manual_items"] = manual_items
+
+# 입력 상태 표시
+if manual_items:
+    st.success(f"✅ {len(manual_items)}개 품목이 입력되었습니다.")
+
 # ----------------------------------------------------------
-# 버튼 (중앙)
+# 버튼 활성화 조건: 이미지 OR 수동입력이 있으면 활성화
 # ----------------------------------------------------------
-if uploaded_file is not None:
-    c1, c2, c3 = st.columns([2, 1, 2])
-    with c2:
-        run = st.button("🚀 분류 시작", type="primary", use_container_width=True, key="run_btn_v2")
+can_process = uploaded_file is not None or len(manual_items) > 0
+
+if can_process:
+    st.markdown("<br>", unsafe_allow_html=True)
+    col1, col2, col3 = st.columns([2, 1, 2])
+    with col2:
+        run = st.button("🚀 분류 시작", type="primary", use_container_width=True, key="run_btn_v3")
 
     # ======================================================
-    # 1) 무거운 파이프라인: 버튼 눌렀을 때만 실행
-    #    실행 결과는 session_state["results"]에 저장
+    # 파이프라인 실행
     # ======================================================
     if run:
-        progress = st.progress(0, "이미지 분석 준비 중...")
-
-        # --- 여기는 기존 파이프라인 그대로 (OCR → 검색 → LLM) ---
-        #     단, 마지막에 df_definite / ambiguous_results / failed_results만 저장
-        img = Image.open(uploaded_file).convert("RGB")
-        progress.progress(20, "📸 이미지에서 텍스트 추출 중...")
-
-        gemini_model = genai.GenerativeModel("gemini-1.5-flash")
-
-        prompt = """
+        if classification_chain_single is None:
+            st.error("시스템 초기화에 실패했습니다. 관리자에게 문의하세요.")
+        else:
+            progress = st.progress(0, "분석 준비 중...")
+            
+            # 두 소스에서 데이터 수집
+            all_items = []
+            
+            # 1. 이미지에서 추출
+            if uploaded_file is not None:
+                progress.progress(20, "📸 이미지에서 텍스트 추출 중...")
+                try:
+                    img = Image.open(uploaded_file).convert("RGB")
+                    gemini_model = genai.GenerativeModel("gemini-1.5-flash")
+                    
+                    prompt = """
 가계부 사진에서 표를 인식해서 각 행의
 1) 품목명(= '수입종류 및 지출의 품명과 용도' 열),
 2) 수입 금액,
@@ -561,30 +704,52 @@ JSON 스키마:
   ]
 }
 """
-        img_bytes = uploaded_file.getvalue()
-        resp = gemini_model.generate_content(
-            [{"text": prompt}, {"inline_data": {"mime_type": uploaded_file.type, "data": img_bytes}}],
-            generation_config={"response_mime_type": "application/json"}
-        )
-        raw = resp.text
-        data = json.loads(raw)
+                    img_bytes = uploaded_file.getvalue()
+                    resp = gemini_model.generate_content(
+                        [{"text": prompt}, {"inline_data": {"mime_type": uploaded_file.type, "data": img_bytes}}],
+                        generation_config={"response_mime_type": "application/json"}
+                    )
+                    raw = resp.text
+                    data = json.loads(raw)
+                    
+                    # OCR 결과 처리
+                    for it in data.get("items", []):
+                        name = str(it.get("name", "")).strip()
+                        def to_int(x):
+                            s = str(x).replace(",", "").strip()
+                            return int(re.sub(r"[^\d]", "", s)) if re.search(r"\d", s) else 0
+                        income = to_int(it.get("income", 0))
+                        expense = to_int(it.get("expense", 0))
+                        if name:
+                            all_items.append({"name": name, "income": income, "expense": expense})
+                except Exception as e:
+                    st.warning(f"이미지 처리 중 오류: {e}")
+            
+            # 2. 수동 입력 데이터 추가
+            all_items.extend(manual_items)
+        
+        # 합산을 위한 딕셔너리 생성
+        aggregated_items = {}
 
-        # 후처리
-        items = []
-        for it in data.get("items", []):
-            name = str(it.get("name", "")).strip()
-            def to_int(x):
-                s = str(x).replace(",", "").strip()
-                return int(re.sub(r"[^\d]", "", s)) if re.search(r"\d", s) else 0
-            income = to_int(it.get("income", 0))
-            expense = to_int(it.get("expense", 0))
-            if name:
-                items.append({"name": name, "income": income, "expense": expense})
+        # 모든 품목을 순회하며 합산
+        for item in all_items:
+            name = item["name"]
+            if name in aggregated_items:
+                # 이미 등록된 품목이면, 수입과 지출을 더해줌
+                aggregated_items[name]["income"] += item["income"]
+                aggregated_items[name]["expense"] += item["expense"]
+            else:
+                # 처음 보는 품목이면, 딕셔너리에 새로 추가
+                aggregated_items[name] = item.copy() # 원본 수정을 방지하기 위해 복사
 
+        # 딕셔너리의 값들을 리스트로 변환하여 최종 결과 생성
+        items = list(aggregated_items.values())
+        
+        # 이제 items 리스트로 기존 파이프라인 진행
         product_name_list = [it["name"] for it in items]
-        income_list        = [it["income"] for it in items]
-        expense_list       = [it["expense"] for it in items]
-
+        income_list = [it["income"] for it in items]
+        expense_list = [it["expense"] for it in items]
+        
         progress.progress(30, f"✅ {len(items)}개 품목 발견")
 
         # 코드→항목명 맵
