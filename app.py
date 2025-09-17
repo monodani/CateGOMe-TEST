@@ -588,7 +588,7 @@ else:
 st.markdown(f"""
 <div class="categome-caption">
 가계동향조사 항목코드 자동분류 AI챗봇, 카테고미입니다!<br>
-번거롭고 애매모호한 분류작업, 제가 똑똑하게 도와드리겠습니다.
+번거롭고 애매한 분류작업, 제가 똑똑하게 도와드리겠습니다.
 </div>
 """, unsafe_allow_html=True)
 
