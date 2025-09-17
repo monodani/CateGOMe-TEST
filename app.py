@@ -23,7 +23,7 @@ REQUIRED_COLS = ["항목명", "입력코드", "처리코드", "항목분류내�
 # ========================================
 # 🎨 UI 설정값 (관리자가 코드에서 직접 조절)
 # ========================================
-CAPTION_FONT_MULTIPLIER = 2.0  # 설명 문구 폰트 크기 배수 (1.0 = 기본, 2.0 = 2배)
+CAPTION_FONT_MULTIPLIER = 1.5  # 설명 문구 폰트 크기 배수 (1.0 = 기본, 2.0 = 2배)
 CAPTION_BASE_FONT_SIZE = 16    # 기본 폰트 크기 (픽셀)
 
 
@@ -48,6 +48,7 @@ from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from langchain_community.vectorstores import FAISS
 
 import chardet
+import base64
 
 # Gemini 설정
 genai.configure(api_key=GENAI_API_KEY)
@@ -430,7 +431,7 @@ prompt_template_single = PromptTemplate.from_template("""
       "result": {{
         "input_code": "추론한 숫자 입력코드",
         "confidence": "신뢰도 (예: 95%)",
-        "reason": "절대 규칙과 정보 우선순위 규칙에 입각하여 이 코드를 선택한 명확한 이유.",
+        "reason": "절대 규칙과 정보 우선순위 규칙에 입각하여 이 코드를 선택한 명확한 이유.(경어로 답변)",
         "evidence": "근거로 사용한 가장 핵심적인 컨텍스트 내용(청크) 하나를 그대로 복사"
       }}
     }}
@@ -440,17 +441,17 @@ prompt_template_single = PromptTemplate.from_template("""
     ```json
     {{
       "classification_type": "AMBIGUOUS",
-      "reason_for_ambiguity": "왜 단일 코드로 확정할 수 없는지에 대한 핵심 이유 (예: '보험의 종류(화재, 건강, 운전, 자동차 등)가 명시되지 않아 여러 후보가 가능함')",
+      "reason_for_ambiguity": "왜 단일 코드로 확정할 수 없는지에 대한 핵심 이유 (예: '보험의 종류(화재, 건강, 운전, 자동차 등)가 명시되지 않아 여러 후보가 가능함' 등)"(경어로 답변),
       "candidates": [
         {{
           "input_code": "후보 입력코드 1",         
           "confidence": "후보 1의 신뢰도 (예: 50%)",
-          "reason": "이 코드가 후보인 이유"
+          "reason": "이 코드가 후보인 이유"(음슴체로 답변)
         }},
         {{
           "input_code": "후보 입력코드 2",  
           "confidence": "후보 2의 신뢰도 (예: 30%)",
-          "reason": "이 코드가 후보인 이유"
+          "reason": "이 코드가 후보인 이유"(음슴체로 답변)
         }}
       ],
       "evidence": "판단에 사용된 가장 관련성 높은 컨텍스트 내용(청크) 하나를 그대로 복사"
@@ -500,13 +501,16 @@ st.markdown(f"""
     margin-bottom: 20px;
 }}
 
-/* 설명 문구 스타일 */
+/* 설명 문구 스타일 (수정됨) */
 .categome-caption {{
     text-align: center;
     color: #666;
     margin-bottom: 40px;
-    font-size: {CAPTION_BASE_FONT_SIZE * CAPTION_FONT_MULTIPLIER}px;
+    /* 화면 너비에 따라 폰트 크기 자동 조절 (최소 16px, 최대 32px) */
+    font-size: clamp(16px, 2.5vw, 32px);
     line-height: 1.6;
+    /* 자동 줄바꿈 방지 */
+    white-space: nowrap;
 }}
 
 /* 입력 테이블 스타일링 */
@@ -564,12 +568,27 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 # 로고 중앙 정렬
-col1, col2, col3 = st.columns([1, 2, 1])
-with col2:
-    if os.path.exists("assets/CateGOMe_kor.png"):
-        st.image("assets/CateGOMe_kor.png", width=420)
-    else:
-        st.markdown("<h1 style='text-align: center;'>🤖 CateGOMe</h1>", unsafe_allow_html=True)
+# st.columns 대신 CSS flexbox를 이용한 중앙 정렬로 변경하여 'wide' 모드에서도 안정적으로 동작
+# 로컬 이미지를 st.markdown에서 사용하기 위해 Base64로 인코딩
+def image_to_base64(path):
+    with open(path, "rb") as image_file:
+        return base64.b64encode(image_file.read()).decode('utf-8')
+
+logo_path = "assets/CateGOMe_kor.png"
+if os.path.exists(logo_path):
+    try:
+        logo_base64 = image_to_base64(logo_path)
+        st.markdown(f"""
+        <div class="categome-logo-container">
+            <img src="data:image/png;base64,{logo_base64}" alt="CateGOMe Logo" width="420">
+        </div>
+        """, unsafe_allow_html=True)
+    except Exception as e:
+        # 파일은 있으나 읽기 오류 등 발생 시
+        st.markdown("<h1 style='text-align: center;'>🤖 CateGOMe (로고 로딩 오류)</h1>", unsafe_allow_html=True)
+else:
+    # 이미지가 없을 경우의 대체 텍스트
+    st.markdown("<h1 style='text-align: center;'>🤖 CateGOMe</h1>", unsafe_allow_html=True)```
 
 # 설명 문구
 st.markdown(f"""
