@@ -487,8 +487,8 @@ st.markdown('</div>', unsafe_allow_html=True)
 
 st.markdown("""
 <div class="categome-caption">
-가계동향조사 항목코드 자동분류 AI 서비스<br>
-가계부 이미지를 업로드하면 자동으로 품목을 분류해드립니다
+가계동향조사 항목코드 자동분류 AI챗봇 카테고미입니다!<br>
+가계부 이미지를 업로드해주시면 자동으로 품목을 분류해드리겠습니다.
 </div>
 """, unsafe_allow_html=True)
 
