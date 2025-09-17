@@ -83,11 +83,12 @@ def initialize_system():
         }
         # ============================================
 
-with open(CSV_PATH, 'rb') as f:
-    result = chardet.detect(f.read())
-    encoding = result['encoding']
-
-        _df = pd.read_csv(CSV_PATH, encoding = encoding)
+        # CSV 인코딩 감지 후 읽기
+        with open(CSV_PATH, 'rb') as f:
+            result = chardet.detect(f.read())
+            encoding = result['encoding']
+        
+        _df = pd.read_csv(CSV_PATH, encoding=encoding)
         missing = [c for c in REQUIRED_COLS if c not in _df.columns]
         if missing:
             raise KeyError(f"ERROR[csv]: Missing required columns: {missing}")
