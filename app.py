@@ -613,8 +613,8 @@ if uploaded_file is not None and st.session_state["last_file_name"] != uploaded_
     st.session_state["results"] = None
     st.session_state["last_file_name"] = uploaded_file.name
 
-# === 수동 입력 테이블 (세련된 디자인) ===
-st.markdown("### ✏️ 직접 입력하기")
+# === 수동 입력 테이블 ===
+st.markdown("### ✏️ 직접 입력")
 st.markdown("품목 정보를 직접 입력할 수 있습니다.")
 
 # 입력 테이블 컨테이너
