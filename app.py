@@ -423,12 +423,14 @@ prompt_template_single = PromptTemplate.from_template("""
       "reason_for_ambiguity": "왜 단일 코드로 확정할 수 없는지에 대한 핵심 이유 (예: '보험의 종류(화재, 건강, 운전, 자동차 등)가 명시되지 않아 여러 후보가 가능함')",
       "candidates": [
         {{
-          "input_code": "후보 입력코드 1"("후보 입력코드 1의 항목명"),
+          "input_code": "후보 입력코드 1",
+          "item_name" : "후보 입력코드 1의 항목명",          
           "confidence": "후보 1의 신뢰도 (예: 50%)",
           "reason": "이 코드가 후보인 이유"
         }},
         {{
-          "input_code": "후보 입력코드 2"("후보 입력코드 2의 항목명"),,
+          "input_code": "후보 입력코드 2",
+          "item_name" : "후보 입력코드 2의 항목명",   
           "confidence": "후보 2의 신뢰도 (예: 30%)",
           "reason": "이 코드가 후보인 이유"
         }}
