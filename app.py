@@ -225,7 +225,7 @@ def _get_term_info_via_llm(llm: ChatOpenAI, user_query: str, num_related_terms: 
       "original_term": "수소차 충전",
       "term": "수소차 충전",
       "description": "수소차 충전은 수소 연료전지 차량을 운행하기 위해 수소 연료를 보급하는 행위입니다.",
-      "related_terms": ["수소차", "충전", "연료, "친환경차", ...]
+      "related_terms": ["수소", "연료", "충전", "수소차", "친환경차", ...]
     }},
     {{
       "original_term": "파플리시티",
@@ -423,14 +423,12 @@ prompt_template_single = PromptTemplate.from_template("""
       "reason_for_ambiguity": "왜 단일 코드로 확정할 수 없는지에 대한 핵심 이유 (예: '보험의 종류(화재, 건강, 운전, 자동차 등)가 명시되지 않아 여러 후보가 가능함')",
       "candidates": [
         {{
-          "input_code": "후보 입력코드 1",
-          "item_name" : "후보 입력코드 1의 항목명",          
+          "input_code": "후보 입력코드 1",         
           "confidence": "후보 1의 신뢰도 (예: 50%)",
           "reason": "이 코드가 후보인 이유"
         }},
         {{
-          "input_code": "후보 입력코드 2",
-          "item_name" : "후보 입력코드 2의 항목명",   
+          "input_code": "후보 입력코드 2",  
           "confidence": "후보 2의 신뢰도 (예: 30%)",
           "reason": "이 코드가 후보인 이유"
         }}
