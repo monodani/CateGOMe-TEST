@@ -538,6 +538,7 @@ st.markdown(f"""
     font-weight: 600;
     border-radius: 25px;
     transition: all 0.3s ease;
+    white-space: nowrap;
 }}
 
 .stButton > button:hover {{
