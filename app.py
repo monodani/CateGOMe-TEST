@@ -39,6 +39,8 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from langchain_community.vectorstores import FAISS
 
+import chardet
+
 # Gemini 설정
 genai.configure(api_key=GENAI_API_KEY)
 
@@ -80,7 +82,7 @@ def initialize_system():
             "classification": _vectorstore_classification
         }
         # ============================================
-import chardet
+
 with open(CSV_PATH, 'rb') as f:
     result = chardet.detect(f.read())
     encoding = result['encoding']
