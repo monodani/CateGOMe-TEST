@@ -588,7 +588,7 @@ if os.path.exists(logo_path):
         st.markdown("<h1 style='text-align: center;'>🤖 CateGOMe (로고 로딩 오류)</h1>", unsafe_allow_html=True)
 else:
     # 이미지가 없을 경우의 대체 텍스트
-    st.markdown("<h1 style='text-align: center;'>🤖 CateGOMe</h1>", unsafe_allow_html=True)```
+    st.markdown("<h1 style='text-align: center;'>🤖 CateGOMe</h1>", unsafe_allow_html=True)
 
 # 설명 문구
 st.markdown(f"""
