@@ -174,7 +174,7 @@ def _keyword_search_on_docs(docs: List[Document], term: str) -> List[Document]:
     return [doc for doc in docs if term.lower() in doc.page_content.lower()]
 
 
-def _similarity_topk_for_term(vs: FAISS, embeddings: OpenAIEmbeddings, term: str, k: int = 2) -> List[Document]:
+def _similarity_topk_for_term(vs: FAISS, embeddings: OpenAIEmbeddings, term: str, k: int = 3) -> List[Document]:
     if vs is None or embeddings is None:  # 초기화 실패 시
         return []
     retriever = vs.as_retriever(
@@ -183,7 +183,7 @@ def _similarity_topk_for_term(vs: FAISS, embeddings: OpenAIEmbeddings, term: str
     )
     return retriever.invoke(term)
 
-def _get_term_info_via_llm(llm: ChatOpenAI, user_query: str, num_related_terms: int = 3) -> List[Dict[str, Any]]:
+def _get_term_info_via_llm(llm: ChatOpenAI, user_query: str, num_related_terms: int = 4) -> List[Dict[str, Any]]:
     """
     LLM을 호출하여 사용자 쿼리에서 핵심 품목명들을 추출하고, 각 품목명에 대한 설명과 관련 용어를 받습니다.
     안정적인 JSON 추출을 위해 프롬프트와 파싱 로직이 강화되었습니다.
@@ -193,21 +193,23 @@ def _get_term_info_via_llm(llm: ChatOpenAI, user_query: str, num_related_terms: 
 
     # === 품목 설명 및 관련어 반환 프롬프트 (Colab 그대로) ===
     prompt = f"""
-너는 사용자 쿼리에서 'product_name' 리스트에 포함된 모든 품목명을 분석하고, 오탈자를 교정한 뒤 검색에 유용한 정보를 추출하는 전문가 AI이다.
+너는 **사용자의 가계부에서 추출된 정보**로 구성된 쿼리에서 'product_name' 리스트에 포함된 모든 품목명을 분석하고, 오탈자를 교정한 뒤 검색에 유용한 정보를 추출하는 전문가 AI이다.
+**쿼리에 포함된 정보의 출처가 가계부**라는 것을 반드시 유념해서 **가계부의 수입, 지출 항목에 대한 것임을 고려하여** 아래의 작업절차를 준수해야 한다.
 
 ## 작업 절차 (반드시 순서대로 따를 것) ##
 1. **품목명 추출:** `product_name = [...]` 리스트에 있는 모든 원본 품목명을 빠짐없이 추출한다.
-2. **오탈자 교정:** 각 원본 품목명의 오탈자나 불분명한 표현을 가장 자연스럽고 일반적인 표현으로 수정한다(예: "파플리시티" -> "퍼플렉시티"). 만약 수정할 필요가 없다면 원본을 그대로 사용한다.
+2. **오탈자 교정:** 각 원본 품목명의 오탈자나 불분명한 표현을 가장 자연스럽고 일반적인 표현으로 수정한다(예: "파플리시티" -> "퍼플렉시티", "수차비" -> "주차비" 등). 만약 수정할 필요가 없다면 원본을 그대로 사용한다.
 3. **설명 생성:** **수정된 품목명**에 대해, 그 품목의 본질과 목적을 2~3 문장으로 간결하게 설명한다.
 4. **관련 용어 추출 (매우 중요):**
    - **수정된 품목명**과 **네가 작성한 설명**을 모두 참고하여, 검색에 가장 중요하다고 판단되는 핵심 관련 용어를 {num_related_terms}개 추출한다.
-   - **단순 동의어를 넘어, 그 품목의 '목적'이나 '상위 카테고리'에 해당하는 개념적인 단어를 반드시 포함해야 한다.** (예: '전기차 충전'의 목적은 '연료'를 채우는 것이므로 '연료'나 '에너지'를 포함)
+   - **단순 동의어를 넘어, 그 품목의 '목적'이나 '상위 카테고리'에 해당하는 개념적인 단어를 반드시 포함해야 한다.** (예: '수소차/전기차 충전'의 목적은 '연료'를 채우는 것이므로 '연료'나 '에너지'를 포함)
+   - **띄어쓰기를 포함하지 않는 한 단어 형태여야 한다.** (예: "연료", "에너지", 구독서비스" 등 )
 
 5. **JSON 출력:** 다른 어떤 설명도 없이, 아래 "출력 예시"와 **완벽하게 동일한 JSON 형식**으로만 응답한다.
 
 ## 입력 및 출력 예시 (매우 중요) ##
 ### 입력 쿼리 예시:
-'''product_name = ['모둠쌈', '전기차 충전', '파플리시티'] ...'''
+'''product_name = ['모둠쌈', '수소차 충전', '파플리시티'] ...'''
 
 ### 너의 JSON 출력 예시:
 ```json
@@ -216,20 +218,20 @@ def _get_term_info_via_llm(llm: ChatOpenAI, user_query: str, num_related_terms: 
     {{
       "original_term": "모둠쌈",
       "term": "모둠쌈",
-      "description": 상추·깻잎 등 다양한 쌈채소를 한데 묶어 제공하는 구성으로, 밥과 고기, 쌈장을 곁들여 싸 먹는 한국식 식사 방식입니다. 채소 섭취를 늘리고 담백하게 즐기려는 목적의 메뉴로도 활용됩니다.",
-      "related_terms": [한식", "쌈", "채소"]
+      "description": "모둠쌈은 상추, 깻잎 등 다양한 채소와 밥·고기·양념을 함께 싸먹는 식사 메뉴 중 하나입니다.",
+      "related_terms": ["식사", "채소", "반찬", ...]
     }},
     {{
-      "original_term": "전기차 충전",
-      "term": "전기차 충전",
-      "description": "전기 자동차의 배터리에 전력을 공급하는 행위입니다. 자동차를 운행하기 위한 에너지를 채우는 과정입니다.",
-      "related_terms": ["전기차", "충전소", "연료"]
+      "original_term": "수소차 충전",
+      "term": "수소차 충전",
+      "description": "수소차 충전은 수소 연료전지 차량을 운행하기 위해 수소 연료를 보급하는 행위입니다.",
+      "related_terms": ["수소차", "충전", "연료, "친환경차", ...]
     }},
     {{
       "original_term": "파플리시티",
       "term": "퍼플렉시티",
-      "description": "실시간 웹검색과 생성형 AI 질의응답을 결합한 검색 서비스입니다. 질문에 대해 요약된 답변과 함께 관련 출처를 제시해 신속한 정보탐색·리서치를 돕습니다.",
-      "related_terms": ["AI 검색엔진", "웹검색", "AI"]
+      "description": "퍼플렉시티는 실시간 웹검색과 생성형 AI 질의응답을 결합한 검색 서비스로, AI 검색·챗봇 기능을 제공하는 구독 기반 플랫폼 서비스입니다.",
+      "related_terms": ["구독서비스", "플랫폼", "AI", "검색", ...]
     }}
   ]
 }}
@@ -277,7 +279,7 @@ def search_classification_codes(
     user_query: str,
     all_docs_from_vs: Dict[str, List[Document]],  # 파라미터
     sim_topk_per_term: int = 3,  # 유사도 검색 결과 개수
-    num_related_terms: int = 3  # LLM 관련 용어 개수
+    num_related_terms: int = 4  # LLM 관련 용어 개수
 ) -> Dict[str, Any]:
     """
     사용자 쿼리에 대해 분류 코드를 검색합니다.
@@ -370,8 +372,8 @@ def search_classification_codes(
 
 # prompt_template_single (Colab 프롬프트 그대로 사용)
 prompt_template_single = PromptTemplate.from_template("""
-    SYSTEM: 당신은 주어진 데이터를 분석하여 가장 적합한 '입력코드'와 '항목명'을 추론하는, 극도로 꼼꼼하고 규칙을 엄수하는 데이터 분류 AI이며, 당신의 이름은 "카테고미(CateGOMe)"입니다. 당신의 답변은 반드시 지정된 JSON 형식이어야 합니다.
-
+    SYSTEM: 당신은 **가계부로부터 추출된** 주어진 데이터를 분석하여 가장 적합한 '입력코드'와 '항목명'을 추론하는, 극도로 꼼꼼하고 규칙을 엄수하는 데이터 분류 AI이며, 당신의 이름은 "카테고미(CateGOMe)"입니다. 당신의 답변은 반드시 지정된 JSON 형식이어야 합니다.
+    
     ## 절대 규칙 (가장 중요! 반드시 따를 것) ##
     1. **수입/지출 규칙:** `question`의 `expense` 값이 0보다 크면, `input_code`는 **절대로 1000 미만이 될 수 없습니다.** 반대로 `income` 값이 0보다 크면, `input_code`는 **절대로 1000 이상이 될 수 없습니다.** 예외는 없습니다.
     2. **정보 우선순위 규칙:** `context`에서 `출처: 조사사례집`(또는 cases) 정보는 `출처: 항목분류집` 정보보다 **항상 우선**합니다. 만약 두 정보가 충돌하면, 무조건 '조사사례집'의 코드를 따라야 합니다.
@@ -454,6 +456,14 @@ def fmt_won(x):
         return f"{int(x):,}원"
     except Exception:
         return "0원"
+
+def format_extra(t):
+    lines = [f"품목명: {t['term']}"]
+    if t.get("description"):
+        lines.append(f"설명: {t['description']}")
+    if t.get("related_terms"):
+        lines.append(f"관련어: {', '.join(t['related_terms'])}")
+    return "\n".join(lines)
         
 # ========================================
 # Streamlit UI (심플하게)
@@ -594,7 +604,12 @@ JSON 스키마:
 
             context = "\n\n---\n\n".join([d.page_content for d in search_output["context_docs"]])
             context = context.replace("출처: cases", "출처: 조사사례집").replace("출처: classification", "출처: 항목분류집")
+            extra_info = "\n\n".join(format_extra(t) for t in search_output.get("extracted_terms_info", []))
 
+            if extra_info:
+                context = context + "\n\n---\n\n[LLM 보조 설명]\n" + extra_info
+
+            
             final_question = f"product_name = ['{pname}'], income = [{income_list[i]}], expense = [{expense_list[i]}]"
             input_data = {"question": final_question, "context": context}
 
