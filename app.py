@@ -19,8 +19,6 @@ CSV_PATH = "data/classification_code.csv"
 
 REQUIRED_COLS = ["항목명", "입력코드", "처리코드", "항목분류내용", "포함항목", "제외항목"]
 
-CAPTION_FONT_MULTIPLIER = 1.0  # 설명 문구 폰트 크기 배수 (1.0 = 기본, 2.0 = 2배)
-CAPTION_BASE_FONT_SIZE = 12    # 기본 폰트 크기 (픽셀)
 
 # ========================================
 # 📦 라이브러리 임포트
@@ -502,7 +500,7 @@ st.markdown(f"""
     color: #666;
     margin-bottom: 40px;
     /* 화면 너비에 따라 폰트 크기 자동 조절 (최소 16px, 최대 32px) */
-    font-size: clamp(12px, 2.5vw, 32px);
+    font-size: clamp(16px, 2.5vw, 32px);
     line-height: 1.6;
     /* 자동 줄바꿈 방지 */
     white-space: nowrap;
@@ -589,7 +587,7 @@ else:
 st.markdown(f"""
 <div class="categome-caption">
 가계동향조사 항목코드 자동분류 AI챗봇 카테고미입니다!<br>
-가계부 이미지를 업로드해주시면 자동으로 품목을 분류해드리겠습니다.
+번거롭고 애매모호한 분류작업 제가 똑똑하게 도와드리겠습니다.
 </div>
 """, unsafe_allow_html=True)
 
@@ -603,7 +601,7 @@ st.session_state.setdefault("manual_input", [])  # 수동 입력 데이터
 # === 업로더 ===
 st.markdown("### 📷 이미지 업로드")
 uploaded_file = st.file_uploader(
-    "가계부 이미지를 선택하세요",
+    "가계부 이미지를 업로드해주세요.",
     type=['png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp', 'tiff'],
     help="드래그 앤 드롭 또는 클릭하여 파일 선택",
     key="main_uploader_v3",
@@ -616,7 +614,7 @@ if uploaded_file is not None and st.session_state["last_file_name"] != uploaded_
 
 # === 수동 입력 테이블 (세련된 디자인) ===
 st.markdown("### ✏️ 직접 입력하기")
-st.markdown("이미지 업로드 대신 또는 함께 직접 품목을 입력할 수 있습니다.")
+st.markdown("품목 정보를 직접 입력할 수 있습니다.")
 
 # 입력 테이블 컨테이너
 with st.container():
