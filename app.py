@@ -55,7 +55,10 @@ genai.configure(api_key=GENAI_API_KEY)
 # ========================================
 # Streamlit 페이지 설정
 # ========================================
-icon = Image.open("assets/CateGOMe_kor.png")
+try:
+    icon = Image.open("assets/CateGOMe_logo.png")
+except FileNotFoundError:
+    icon = "🐻"  # 파일이 없을 경우 기본 이모지로 대체
 
 st.set_page_config(
     page_title="카테고미-통계청 항목자동분류AI",
