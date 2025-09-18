@@ -9,7 +9,7 @@ GENAI_API_KEY = st.secrets["GENAI_API_KEY"]
 
 # --- Global (1회 로드 캐시) ----------------------------------------------------
 EMBED_MODEL = "text-embedding-3-large"
-LLM_MODEL = "gpt-5"  # 통합 모델명 변수 사용
+LLM_MODEL = "gpt-4o"  # 통합 모델명 변수 사용
 
 VECTORSTORE_DIR_CASES = "vectorstores/cases"
 INDEX_NAME_CASES = "cases_index"
