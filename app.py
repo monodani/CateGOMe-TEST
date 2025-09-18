@@ -698,7 +698,7 @@ def reset_app_state():
     
     # 파일 업로더 위젯 자체를 리셋 (키를 초기화)
     if 'main_uploader_v3' in st.session_state:
-        st.session_state['main_uploader_v3'] = None
+        del st.session_state['main_uploader_v3']
 
 # ----------------------------------------------------------
 # 버튼 활성화 조건: 이미지 OR 수동입력이 있으면 활성화
