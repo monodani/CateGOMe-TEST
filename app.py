@@ -560,10 +560,12 @@ st.markdown(f"""
     padding: 8px 12px;
 }}
 
-hr {{
+.input-table-inner:empty {
     display: none;
     visibility: hidden;
-}}
+    padding: 0;
+    margin: 0;
+}
 
 </style>
 """, unsafe_allow_html=True)
