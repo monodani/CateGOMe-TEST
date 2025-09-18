@@ -9,7 +9,7 @@ GENAI_API_KEY = st.secrets["GENAI_API_KEY"]
 
 # --- Global (1회 로드 캐시) ----------------------------------------------------
 EMBED_MODEL = "text-embedding-3-large"
-LLM_MODEL = "gpt-4o"  # 통합 모델명 변수 사용
+LLM_MODEL = "gpt-5"  # 통합 모델명 변수 사용
 
 VECTORSTORE_DIR_CASES = "vectorstores/cases"
 INDEX_NAME_CASES = "cases_index"
@@ -105,7 +105,7 @@ def initialize_system():
         # LLM 모델도 캐시
         _llm_model = ChatOpenAI(
             model_name=LLM_MODEL,
-            temperature=0.3,
+            temperature=0.1,
             openai_api_key=OPENAI_API_KEY
         )
 
@@ -424,7 +424,7 @@ prompt_template_single = PromptTemplate.from_template("""
       "result": {{
         "input_code": "추론한 숫자 입력코드",
         "confidence": "신뢰도 (예: 95%)",
-        "reason": "절대 규칙과 정보 우선순위 규칙에 입각하여 이 코드를 선택한 명확한 이유.(경어로 답변)",
+        "reason": "절대 규칙과 정보 우선순위 규칙에 입각하여 이 코드를 선택한 명확한 이유.(경어로 답변해야 함.)",
         "evidence": "근거로 사용한 가장 핵심적인 컨텍스트 내용(청크) 하나를 그대로 복사"
       }}
     }}
@@ -434,7 +434,7 @@ prompt_template_single = PromptTemplate.from_template("""
     ```json
     {{
       "classification_type": "AMBIGUOUS",
-      "reason_for_ambiguity": "왜 단일 코드로 확정할 수 없는지에 대한 핵심 이유 (예: '보험의 종류(화재, 건강, 운전, 자동차 등)가 명시되지 않아 여러 후보가 가능함' 등)"(경어로 답변),
+      "reason_for_ambiguity": "왜 단일 코드로 확정할 수 없는지에 대한 핵심 이유 (예: '보험의 종류(화재, 건강, 운전, 자동차 등)가 명시되지 않아 여러 후보가 가능함' 등)"(경어로 답변해야 함.),
       "candidates": [
         {{
           "input_code": "후보 입력코드 1",         
