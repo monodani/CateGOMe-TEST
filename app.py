@@ -486,7 +486,6 @@ def format_extra(t):
 st.markdown(f"""
 <style>
 
-/* /// [추가] 테마에 의해 의도치 않게 표시될 수 있는 수평선 숨기기 /// */
 hr {
     display: none;
     visibility: hidden;
