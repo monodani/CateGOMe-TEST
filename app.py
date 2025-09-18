@@ -486,11 +486,6 @@ def format_extra(t):
 st.markdown(f"""
 <style>
 
-hr {
-    display: none;
-    visibility: hidden;
-}
-
 /* 로고 중앙 정렬 */
 .categome-logo-container {{
     display: flex;
@@ -564,6 +559,12 @@ hr {
     border: 1px solid #e0e0e0;
     padding: 8px 12px;
 }}
+
+hr {{
+    display: none;
+    visibility: hidden;
+}}
+
 </style>
 """, unsafe_allow_html=True)
 
