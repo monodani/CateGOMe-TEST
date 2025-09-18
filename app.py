@@ -638,38 +638,36 @@ with st.container():
     cols[1].markdown('<div class="input-header">💰 수입</div>', unsafe_allow_html=True)
     cols[2].markdown('<div class="input-header">💸 지출</div>', unsafe_allow_html=True)
     
-    # 입력 행들
-    manual_items = []
-    for i in range(5):
-        cols = st.columns([3, 2, 2])
-        with cols[0]:
-            name = st.text_input(
-                f"품목 {i+1}", 
-                key=f"name_{i}", 
-                placeholder=f"품목 {i+1}",
-                label_visibility="collapsed"
-            )
-        with cols[1]:
-            income = st.number_input(
-                f"수입 {i+1}", 
-                min_value=0, 
-                value=0, 
-                key=f"income_{i}",
-                label_visibility="collapsed",
-                placeholder="0"
-            )
-        with cols[2]:
-            expense = st.number_input(
-                f"지출 {i+1}", 
-                min_value=0, 
-                value=0, 
-                key=f"expense_{i}",
-                label_visibility="collapsed",
-                placeholder="0"
-            )
-        
-        if name:  # 품목명이 입력된 경우만 추가
-            manual_items.append({"name": name.strip(), "income": income, "expense": expense})
+# 입력 행들
+manual_items = []
+for i in range(5):
+    cols = st.columns([3, 2, 2])
+    with cols[0]:
+        name = st.text_input(
+            f"품목 {i+1}", 
+            key=f"name_{i}", 
+            placeholder=f"품목 {i+1}",
+            label_visibility="collapsed"
+        )
+    with cols[1]:
+        income = st.number_input(
+            f"수입 {i+1}", 
+            min_value=0,
+            key=f"income_{i}",
+            label_visibility="collapsed"
+            # value=0 제거
+        )
+    with cols[2]:
+        expense = st.number_input(
+            f"지출 {i+1}", 
+            min_value=0,
+            key=f"expense_{i}",
+            label_visibility="collapsed"
+            # value=0 제거
+        )
+    
+    if name:  # 품목명이 입력된 경우만 추가
+        manual_items.append({"name": name.strip(), "income": income, "expense": expense})
     
     st.markdown('</div></div>', unsafe_allow_html=True)
 
@@ -688,17 +686,24 @@ can_process = uploaded_file is not None or len(manual_items) > 0
 def reset_app_state():
     # 수동 입력 필드 초기화
     for i in range(5):
-        st.session_state[f"name_{i}"] = ""
-        st.session_state[f"income_{i}"] = 0
-        st.session_state[f"expense_{i}"] = 0
+        if f"name_{i}" in st.session_state:
+            del st.session_state[f"name_{i}"]
+        if f"income_{i}" in st.session_state:
+            del st.session_state[f"income_{i}"]
+        if f"expense_{i}" in st.session_state:
+            del st.session_state[f"expense_{i}"]
     
     # 결과 및 파일 업로드 상태 초기화
     st.session_state["results"] = None
     st.session_state["last_file_name"] = None
+    st.session_state["manual_items"] = []
     
-    # 파일 업로더 위젯 자체를 리셋 (키를 초기화)
+    # 파일 업로더 위젯 자체를 리셋
     if 'main_uploader_v3' in st.session_state:
         del st.session_state['main_uploader_v3']
+    
+    # 페이지 새로고침
+    st.rerun()
 
 # ----------------------------------------------------------
 # 버튼 활성화 조건: 이미지 OR 수동입력이 있으면 활성화
