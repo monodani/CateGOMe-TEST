@@ -685,21 +685,6 @@ if manual_items:
 # ----------------------------------------------------------
 can_process = uploaded_file is not None or len(manual_items) > 0
 
-if can_process:
-    st.markdown("<br>", unsafe_allow_html=True)
-    # /// [수정] 버튼들을 중앙에 나란히 배치 ///
-    _, L_COL, R_COL, _ = st.columns([2, 1, 1, 2])
-    with L_COL:
-        run = st.button("🚀 분류 시작", type="primary", use_container_width=True, key="run_btn_v3")
-    with R_COL:
-        # on_click에 위에서 정의한 콜백 함수 연결
-        st.button("🔄 초기화", use_container_width=True, on_click=reset_app_state)
-
-    
-    # ======================================================
-    # 파이프라인 실행
-    # ======================================================
-    # /// [추가] 초기화 콜백 함수 정의 ///
 def reset_app_state():
     # 수동 입력 필드 초기화
     for i in range(5):
@@ -714,8 +699,25 @@ def reset_app_state():
     # 파일 업로더 위젯 자체를 리셋 (키를 초기화)
     if 'main_uploader_v3' in st.session_state:
         st.session_state['main_uploader_v3'] = None
-        
-        
+
+# ----------------------------------------------------------
+# 버튼 활성화 조건: 이미지 OR 수동입력이 있으면 활성화
+# ----------------------------------------------------------
+can_process = uploaded_file is not None or len(manual_items) > 0
+
+if can_process:
+    st.markdown("<br>", unsafe_allow_html=True)
+    # 버튼들을 중앙에 나란히 배치
+    _, L_COL, R_COL, _ = st.columns([2, 1, 1, 2])
+    with L_COL:
+        run = st.button("🚀 분류 시작", type="primary", use_container_width=True, key="run_btn_v3")
+    with R_COL:
+        # on_click에 위에서 정의한 콜백 함수 연결 (이제 함수가 위에 정의되어 있으므로 정상 작동)
+        st.button("🔄 초기화", use_container_width=True, on_click=reset_app_state)
+
+    # ======================================================
+    # 파이프라인 실행: "if run" 블록은 버튼 정의 바로 다음에 위치
+    # ======================================================
     if run:
         if classification_chain_single is None:
             st.error("시스템 초기화에 실패했습니다. 관리자에게 문의하세요.")
