@@ -646,6 +646,8 @@ st.markdown(f"""
 st.session_state.setdefault("results", None)        # 전체 결과 캐시
 st.session_state.setdefault("last_file_name", None) # 업로드 파일 변경 감지
 st.session_state.setdefault("manual_input", [])  # 수동 입력 데이터
+st.session_state.setdefault("uploader_key", 0)      # 파일 업로더 초기화용 카운터
+st.session_state.setdefault("input_key_nonce", 0)   # 직접 입력 필드 초기화용 카운터
 
 # === 업로더 ===
 st.markdown("### 📷 이미지 업로드")
@@ -653,7 +655,7 @@ uploaded_file = st.file_uploader(
     "가계부 이미지를 업로드해주세요.",
     type=['png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp', 'tiff'],
     help="드래그 앤 드롭 또는 클릭하여 파일 선택",
-    key="main_uploader_v3",
+    key=f"main_uploader_v3_{st.session_state['uploader_key']}",
 )
 
 # 파일 바뀌면 결과 초기화
@@ -682,7 +684,7 @@ for i in range(5):
     with cols[0]:
         name = st.text_input(
             f"품목 {i+1}", 
-            key=f"name_{i}", 
+            key=f"name_{st.session_state['input_key_nonce']}_{i}",
             placeholder=f"품목 {i+1}",
             label_visibility="collapsed"
         )
@@ -690,7 +692,7 @@ for i in range(5):
         income = st.number_input(
             f"수입 {i+1}", 
             min_value=0,
-            key=f"income_{i}",
+            key=f"income_{st.session_state['input_key_nonce']}_{i}",
             label_visibility="collapsed"
             # value=0 제거
         )
@@ -698,7 +700,7 @@ for i in range(5):
         expense = st.number_input(
             f"지출 {i+1}", 
             min_value=0,
-            key=f"expense_{i}",
+            key=f"expense_{st.session_state['input_key_nonce']}_{i}",
             label_visibility="collapsed"
             # value=0 제거
         )
@@ -721,24 +723,24 @@ if manual_items:
 can_process = uploaded_file is not None or len(manual_items) > 0
 
 def reset_app_state():
-    # 1. 분류 결과 초기화
+    # 1) 결과/메타 상태 제거
     for k in ["results", "manual_items", "last_file_name"]:
-        if k in st.session_state:
-            del st.session_state[k]
+        st.session_state.pop(k, None)
 
-    # 2. 이미지 업로더 초기화
-    if "main_uploader_v3" in st.session_state:
-        del st.session_state["main_uploader_v3"]
-    if "uploaded_image_v3" in st.session_state:
-        del st.session_state["uploaded_image_v3"]
+    # 2) 업로더 리셋: key 카운터 증가 → 위젯 재마운트로 파일 비우기
+    st.session_state["uploader_key"] = st.session_state.get("uploader_key", 0) + 1
 
-    # 3. 직접 입력 필드 초기화 (5행 × 3열)
-    for i in range(5):
-        for key in [f"name_{i}", f"income_{i}", f"expense_{i}"]:
-            if key in st.session_state:
-                del st.session_state[key]
+    # 3) 직접 입력 리셋: key 카운터 증가 → 위젯 재마운트로 타이핑 값 비우기
+    st.session_state["input_key_nonce"] = st.session_state.get("input_key_nonce", 0) + 1
 
-    # 4. UI 즉시 리프레시
+    # 4) (선택) 흔적 청소: 이전 name_/income_/expense_ 키들 제거
+    #    - 안 해도 동작엔 문제 없지만, 세션 오염 최소화 목적
+    for k in list(st.session_state.keys()):
+        if re.match(r"^(name|income|expense)_\d+(_\d+)?$", k):
+            st.session_state.pop(k, None)
+    st.session_state.pop("uploaded_image_v3", None)
+
+    # 5) 즉시 UI 반영
     st.rerun()
     
 # ----------------------------------------------------------
