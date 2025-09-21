@@ -95,7 +95,7 @@ def initialize_system():
             result = chardet.detect(f.read())
             encoding = result['encoding']
         
-        _df = pd.read_csv(CSV_PATH, encoding=encoding)
+        _df = pd.read_csv(CSV_PATH, encoding=encoding, dtype={'입력코드':str})
         missing = [c for c in REQUIRED_COLS if c not in _df.columns]
         if missing:
             raise KeyError(f"ERROR[csv]: Missing required columns: {missing}")
@@ -177,6 +177,38 @@ def _keyword_search(df: pd.DataFrame, term: str) -> List[Document]:
     # 중복 제거(행 인덱스 기반)
     sub = sub.drop_duplicates(subset=["_rowid"], keep="first")
     return [_short_doc_from_row(r) for _, r in sub.iterrows()]
+
+def create_extended_code_map(df):
+    """범위형 코드를 개별 코드로 확장하여 매핑"""
+    code_map = {}
+    
+    for _, row in df.iterrows():
+        input_code = str(row['입력코드']).strip()
+        item_name = row['항목명']
+        
+        if '-' in input_code:  # 범위형 (예: 0110-0120)
+            parts = input_code.split('-')
+            if len(parts) == 2:
+                try:
+                    start = parts[0].strip()
+                    end = parts[1].strip()
+                    start_num = int(start)
+                    end_num = int(end)
+                    
+                    # 범위 내 모든 코드를 매핑
+                    for num in range(start_num, end_num + 1):
+                        code_str = f"{num:04d}"  # 0110, 0111, ..., 0120
+                        code_map[code_str] = item_name
+                except:
+                    pass
+            # 범위 표현 자체도 저장
+            code_map[input_code] = item_name
+        else:
+            # 이산형 코드
+            code_map[input_code] = item_name
+    
+    return code_map
+    
 
 
 def _keyword_search_on_docs(docs: List[Document], term: str) -> List[Document]:
@@ -387,6 +419,12 @@ def search_classification_codes(
 # prompt_template_single
 prompt_template_single = PromptTemplate.from_template("""
     SYSTEM: 당신은 **가계부로부터 추출된** 주어진 데이터를 분석하여 가장 적합한 '입력코드'와 '항목명'을 추론하는, 극도로 꼼꼼하고 규칙을 엄수하는 데이터 분류 AI이며, 당신의 이름은 "카테고미(CateGOMe)"입니다. 당신의 답변은 반드시 지정된 JSON 형식이어야 합니다.
+
+    ## 입력코드 형식 참고사항 ##
+    1, 입력코드는 단일값(예: 120, 3610) 또는 범위값(예: 0110-0120)으로 되어 있습니다.
+    2. 범위값의 경우, 해당 범위에 포함되는 개별 코드도 유효합니다.
+    3. 예: '0110-0120' 범위에는 0110, 0111, ..., 0119, 0120이 모두 포함됩니다.
+    4. 앞자리 0은 유지해서 반환해주세요 (예: 0120 그대로 사용)
     
     ## 절대 규칙 (가장 중요! 반드시 따를 것) ##
     1. **수입/지출 규칙:** `question`의 `expense` 값이 0보다 크면, `input_code`는 **절대로 1000 미만이 될 수 없습니다.** 반대로 `income` 값이 0보다 크면, `input_code`는 **절대로 1000 이상이 될 수 없습니다.** 예외는 없습니다.
@@ -809,8 +847,9 @@ JSON 스키마:
         progress.progress(30, f"✅ {len(items)}개 품목 발견")
 
         # 코드→항목명 맵
-        _df['입력코드_str'] = _df['입력코드'].astype(str).str.replace(r'\.0$', '', regex=True)
-        code_to_name_map = pd.Series(_df.항목명.values, index=_df.입력코드_str).to_dict()
+        # _df['입력코드_str'] = _df['입력코드'].astype(str).str.replace(r'\.0$', '', regex=True)
+        # code_to_name_map = pd.Series(_df.항목명.values, index=_df.입력코드_str).to_dict()
+        code_to_name_map = create_extended_code_map(_df)
 
         # 벡터스토어 문서 메모리 로드
         all_docs_from_vs = {name: list(vs.docstore._dict.values()) for name, vs in _vectorstores.items()}
