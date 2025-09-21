@@ -741,7 +741,7 @@ def reset_app_state():
     st.session_state.pop("uploaded_image_v3", None)
 
     # 5) 즉시 UI 반영
-    st.rerun()
+    # st.rerun()
     
 # ----------------------------------------------------------
 # 버튼 활성화 조건: 이미지 OR 수동입력이 있으면 활성화
