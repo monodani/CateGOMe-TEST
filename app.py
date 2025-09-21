@@ -132,7 +132,7 @@ def _short_doc_from_row(row: pd.Series) -> Document:
     source = row.get('출처', '항목분류집')
     source_info = f"출처: {source}\n"
 
-    core_fields_order = [col for col in ["입력코드", "항목명", "항목분류내용", "처리코드", "포함항목", "제외항목"] if col in row.index]
+    core_fields_order = [col for col in ["입력코드", "구분", "항목명", "항목분류내용", "처리코드", "포함항목", "제외항목", "출처"] if col in row.index]
 
     core_lines = []
     for col in core_fields_order:
@@ -140,12 +140,10 @@ def _short_doc_from_row(row: pd.Series) -> Document:
 
         # '입력코드' 컬럼일 경우, 정수로 변환을 시도
         if col == "입력코드":
-            try:
-                # float으로 먼저 변환 후 int로 변환하여 "720.0" 같은 문자열도 처리
-                value_str = str(int(float(value)))
-            except (ValueError, TypeError):
+            value_str = str(value).strip()
+        else:
                 # 변환 실패 시 (예: NaN, 비숫자 문자열) 원본 값을 그대로 사용
-                value_str = str(value)
+            value_str = str(value)
         else:
             value_str = str(value)
         # ============================
@@ -899,7 +897,10 @@ JSON 스키마:
                 elif ctype == "AMBIGUOUS":
                     cands = llm.get("candidates", [])
                     for c in cands:
-                        c["항목명"] = code_to_name_map.get(str(c.get("input_code","")).strip(), "항목명 없음")
+                        candidate_code = str(c.get("input_code","")).strip()
+                        item_name = code_to_name_map.get(candidate_code, "항목명 없음")
+                        c["항목명"] = item_name
+                        # c["항목명"] = code_to_name_map.get(str(c.get("input_code","")).strip(), "항목명 없음")
                     ambiguous_results.append({
                         "품목명": pname, "수입": income_list[i], "지출": expense_list[i],
                         "모호성 이유": llm.get("reason_for_ambiguity","N/A"),
