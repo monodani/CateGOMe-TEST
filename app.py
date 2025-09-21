@@ -17,7 +17,7 @@ VECTORSTORE_DIR_CLASSIFICATION = "vectorstores/classification"
 INDEX_NAME_CLASSIFICATION = "classification_index"
 CSV_PATH = "data/classification_code.csv"
 
-REQUIRED_COLS = ["항목명", "입력코드", "구분", "처리코드", "항목분류내용", "포함항목", "제외항목"]
+REQUIRED_COLS = ["항목명", "입력코드", "처리코드", "항목분류내용", "포함항목", "제외항목"]
 
 
 # ========================================
@@ -324,7 +324,7 @@ def search_classification_codes(
     user_query: str,
     all_docs_from_vs: Dict[str, List[Document]],  # 파라미터
     sim_topk_per_term: int = 3,  # 유사도 검색 결과 개수
-    num_related_terms: int = 4  # LLM 관련 용어 개수
+    num_related_terms: int = 3  # LLM 관련 용어 개수
 ) -> Dict[str, Any]:
     """
     사용자 쿼리에 대해 분류 코드를 검색합니다.
@@ -862,7 +862,7 @@ JSON 스키마:
             progress.progress(30 + int(60 * (i + 1) / total), f"🔍 분류 중... ({i+1}/{total}) - {pname_orig}")
 
             q_single = f"product_name = ['{pname_orig}'], income = [{income_list[i]}], expense = [{expense_list[i]}]"
-            search_output = search_classification_codes(q_single, all_docs_from_vs, sim_topk_per_term=3, num_related_terms=4)
+            search_output = search_classification_codes(q_single, all_docs_from_vs, sim_topk_per_term=3, num_related_terms=3)
             pname = (search_output.get("extracted_terms_info") or [{"term": pname_orig}])[0]["term"]
 
             if "error" in search_output or not search_output["context_docs"]:
