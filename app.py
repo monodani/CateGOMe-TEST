@@ -142,9 +142,6 @@ def _short_doc_from_row(row: pd.Series) -> Document:
         if col == "입력코드":
             value_str = str(value).strip()
         else:
-                # 변환 실패 시 (예: NaN, 비숫자 문자열) 원본 값을 그대로 사용
-            value_str = str(value)
-        else:
             value_str = str(value)
         # ============================
 
