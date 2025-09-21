@@ -869,7 +869,7 @@ JSON 스키마:
                 failed_results.append({"품목명": pname, "수입": income_list[i], "지출": expense_list[i], "실패 이유": "검색 결과 없음"})
                 continue
 
-            context = "\n\n---\n\n".join([d.page_content for d in search_output["context_docs"]])
+            context = "\n\n---\n\n".join([doc.page_content for doc in search_output["context_docs"]])
             context = context.replace("출처: cases", "출처: 조사사례집").replace("출처: classification", "출처: 항목분류집")
             extra_info = "\n\n".join(format_extra(t) for t in search_output.get("extracted_terms_info", []))
 
