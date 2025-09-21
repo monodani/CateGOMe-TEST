@@ -721,32 +721,24 @@ if manual_items:
 can_process = uploaded_file is not None or len(manual_items) > 0
 
 def reset_app_state():
-    """'초기화' 버튼 클릭 시 호출되어 세션 상태를 초기화하는 함수"""
-
     # 1. 분류 결과 초기화
-    if "results" in st.session_state:
-        del st.session_state["results"]
+    for k in ["results", "manual_items", "last_file_name"]:
+        if k in st.session_state:
+            del st.session_state[k]
 
-    # 2. 파일 업로더 위젯 자체를 초기화 (key: "main_uploader_v3")
-    #    - key를 삭제하면 "No file selected" 상태로 돌아갑니다.
-    if 'main_uploader_v3' in st.session_state:
-        del st.session_state['main_uploader_v3']
-        
-    # 3. 직접 입력 필드 값 초기화 (가장 중요한 수정사항)
-    #    - for문을 사용해 동적으로 생성된 모든 위젯의 키(name_0, income_0 등)를 찾아 삭제합니다.
-    for i in range(5):  # 0부터 4까지 5개의 입력 행이 있음
-        keys_to_reset = [f"name_{i}", f"income_{i}", f"expense_{i}"]
-        for key in keys_to_reset:
+    # 2. 이미지 업로더 초기화
+    if "main_uploader_v3" in st.session_state:
+        del st.session_state["main_uploader_v3"]
+    if "uploaded_image_v3" in st.session_state:
+        del st.session_state["uploaded_image_v3"]
+
+    # 3. 직접 입력 필드 초기화 (5행 × 3열)
+    for i in range(5):
+        for key in [f"name_{i}", f"income_{i}", f"expense_{i}"]:
             if key in st.session_state:
                 del st.session_state[key]
 
-    # 4. 파일 이름 추적 및 수동 입력 리스트도 초기화
-    if "last_file_name" in st.session_state:
-        st.session_state["last_file_name"] = None
-    if "manual_items" in st.session_state:
-        st.session_state["manual_items"] = []
-
-    # 5. UI를 즉시 새로고침하여 위젯의 변경사항을 반영
+    # 4. UI 즉시 리프레시
     st.rerun()
     
 # ----------------------------------------------------------
