@@ -17,7 +17,7 @@ VECTORSTORE_DIR_CLASSIFICATION = "vectorstores/classification"
 INDEX_NAME_CLASSIFICATION = "classification_index"
 CSV_PATH = "data/classification_code.csv"
 
-REQUIRED_COLS = ["항목명", "입력코드", "처리코드", "항목분류내용", "포함항목", "제외항목"]
+REQUIRED_COLS = ["항목명", "입력코드", "구분", "처리코드", "항목분류내용", "포함항목", "제외항목"]
 
 
 # ========================================
@@ -721,27 +721,30 @@ if manual_items:
 can_process = uploaded_file is not None or len(manual_items) > 0
 
 def reset_app_state():
-    # 수동 입력 필드 초기화
-    for i in range(5):
-        if f"name_{i}" in st.session_state:
-            del st.session_state[f"name_{i}"]
-        if f"income_{i}" in st.session_state:
-            del st.session_state[f"income_{i}"]
-        if f"expense_{i}" in st.session_state:
-            del st.session_state[f"expense_{i}"]
     
-    # 결과 및 파일 업로드 상태 초기화
-    st.session_state["results"] = None
-    st.session_state["last_file_name"] = None
-    st.session_state["manual_items"] = []
-    
-    # 파일 업로더 위젯 자체를 리셋
+    # 1. 분류 결과 초기화
+    if "results" in st.session_state:
+        del st.session_state["results"]
+
+    # 2. 이미지 업로드 관련 정보 초기화
+    if "uploaded_image_v3" in st.session_state:
+        del st.session_state["uploaded_image_v3"]
+
+    # 3. 직접 입력 필드 값 초기화
+    #    - 각 위젯의 key 값을 직접 찾아 삭제합니다.
+    keys_to_reset = ['manual_item_name_v3', 'manual_income_v3', 'manual_expense_v3']
+    for key in keys_to_reset:
+        if key in st.session_state:
+            del st.session_state[key]
+
+    # 4. 파일 업로더 위젯 자체를 초기화
+    #    - 파일 업로더의 key를 삭제하면 "No file selected" 상태로 돌아갑니다.
     if 'main_uploader_v3' in st.session_state:
         del st.session_state['main_uploader_v3']
-    
-    # 페이지 새로고침
-    st.rerun()
 
+    # 5. (중요) UI를 즉시 새로고침하여 위젯의 변경사항을 반영
+    st.rerun()
+    
 # ----------------------------------------------------------
 # 버튼 활성화 조건: 이미지 OR 수동입력이 있으면 활성화
 # ----------------------------------------------------------
@@ -755,7 +758,7 @@ if can_process:
         run = st.button("🚀 분류 시작", type="primary", use_container_width=True, key="run_btn_v3")
     with R_COL:
         # on_click에 위에서 정의한 콜백 함수 연결 (이제 함수가 위에 정의되어 있으므로 정상 작동)
-        st.button("🔄 초기화", use_container_width=True, on_click=reset_app_state)
+        st.button("초기화", on_click=reset_app_state, key="reset_button_v3", use_container_width=True)
 
     # ======================================================
     # 파이프라인 실행: "if run" 블록은 버튼 정의 바로 다음에 위치
