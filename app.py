@@ -174,33 +174,37 @@ def _keyword_search(df: pd.DataFrame, term: str) -> List[Document]:
     return [_short_doc_from_row(r) for _, r in sub.iterrows()]
 
 def create_extended_code_map(df):
-    """범위형 코드를 개별 코드로 확장하여 매핑"""
+    """범위형 코드를 개별 코드로 확장하여 매핑 (우선순위: 이산형 > 범위형)"""
     code_map = {}
     
-    for _, row in df.iterrows():
+    # 1단계: 범위형 먼저 처리 (낮은 우선순위)
+    for _, row in df[df['입력코드'].str.contains('-', na=False)].iterrows():
         input_code = str(row['입력코드']).strip()
         item_name = row['항목명']
         
-        if '-' in input_code:  # 범위형 (예: 0110-0120)
-            parts = input_code.split('-')
-            if len(parts) == 2:
-                try:
-                    start = parts[0].strip()
-                    end = parts[1].strip()
-                    start_num = int(start)
-                    end_num = int(end)
-                    
-                    # 범위 내 모든 코드를 매핑
-                    for num in range(start_num, end_num + 1):
-                        code_str = f"{num:04d}"  # 0110, 0111, ..., 0120
-                        code_map[code_str] = item_name
-                except:
-                    pass
-            # 범위 표현 자체도 저장
-            code_map[input_code] = item_name
-        else:
-            # 이산형 코드
-            code_map[input_code] = item_name
+        parts = input_code.split('-')
+        if len(parts) == 2:
+            try:
+                start_num = int(parts[0].strip())
+                end_num = int(parts[1].strip())
+                
+                # 범위 내 모든 코드를 매핑
+                for num in range(start_num, end_num + 1):
+                    code_str = f"{num:04d}"
+                    code_map[code_str] = item_name
+            except:
+                pass
+        
+        # 범위 표현 자체도 저장
+        code_map[input_code] = item_name
+    
+    # 2단계: 이산형 나중에 처리 (높은 우선순위 - 덮어쓰기)
+    for _, row in df[~df['입력코드'].str.contains('-', na=False)].iterrows():
+        input_code = str(row['입력코드']).strip()
+        item_name = row['항목명']
+        
+        # 이산형은 무조건 덮어쓰기 (같은 코드 여러 행 있어도 같은 항목명이므로 OK)
+        code_map[input_code] = item_name
     
     return code_map
     
