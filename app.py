@@ -9,7 +9,7 @@ GENAI_API_KEY = st.secrets["GENAI_API_KEY"]
 
 # --- Global (1회 로드 캐시) ----------------------------------------------------
 EMBED_MODEL = "text-embedding-3-large"
-LLM_MODEL = "gpt-4o"  # 통합 모델명 변수 사용
+LLM_MODEL = "gpt-4o-mini"  # 통합 모델명 변수 사용
 
 VECTORSTORE_DIR_CASES = "vectorstores/cases"
 INDEX_NAME_CASES = "cases_index"
@@ -224,7 +224,7 @@ def _similarity_topk_for_term(vs: FAISS, embeddings: OpenAIEmbeddings, term: str
         return []
     retriever = vs.as_retriever(
         search_type="mmr",  # MMR 사용 유지
-        search_kwargs={"k": k, "fetch_k": 20, "lambda_mult": 0.75}
+        search_kwargs={"k": k, "fetch_k": 35, "lambda_mult": 0.70}
     )
     return retriever.invoke(term)
 
