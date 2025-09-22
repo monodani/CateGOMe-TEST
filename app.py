@@ -9,7 +9,7 @@ GENAI_API_KEY = st.secrets["GENAI_API_KEY"]
 
 # --- Global (1회 로드 캐시) ----------------------------------------------------
 EMBED_MODEL = "text-embedding-3-large"
-LLM_MODEL = "gpt-4o-mini"  # 통합 모델명 변수 사용
+LLM_MODEL = "gpt-4o"  # 통합 모델명 변수 사용
 
 VECTORSTORE_DIR_CASES = "vectorstores/cases"
 INDEX_NAME_CASES = "cases_index"
@@ -238,8 +238,8 @@ def _get_term_info_via_llm(llm: ChatOpenAI, user_query: str, num_related_terms: 
 
     # 이 함수에서만 gpt-4o 모델 사용
     gpt4o_llm = ChatOpenAI(
-        model_name="gpt-4o",  # 여기서 gpt-4o 지정
-        temperature=0.3,
+        model_name="gpt-4o-mini",  # 여기서 gpt-4o 지정
+        temperature=0.1,
         openai_api_key=OPENAI_API_KEY
     )
     
