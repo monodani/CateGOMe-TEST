@@ -236,6 +236,13 @@ def _get_term_info_via_llm(llm: ChatOpenAI, user_query: str, num_related_terms: 
     if llm is None:
         return []
 
+    # 이 함수에서만 gpt-4o 모델 사용
+    gpt4o_llm = ChatOpenAI(
+        model_name="gpt-4o",  # 여기서 gpt-4o 지정
+        temperature=0.1,
+        openai_api_key=OPENAI_API_KEY
+    )
+    
     # === 품목 설명 및 관련어 반환 프롬프트 ===
     prompt = f"""
 너는 **사용자의 가계부에서 추출된 정보**로 구성된 쿼리에서 'product_name' 리스트에 포함된 모든 품목명을 분석하고, 오탈자를 교정한 뒤 검색에 유용한 정보를 추출하는 전문가 AI이다.
