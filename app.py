@@ -224,7 +224,7 @@ def _similarity_topk_for_term(vs: FAISS, embeddings: OpenAIEmbeddings, term: str
         return []
     retriever = vs.as_retriever(
         search_type="mmr",  # MMR 사용 유지
-        search_kwargs={"k": k, "fetch_k": 20, "lambda_mult": 0.3}
+        search_kwargs={"k": k, "fetch_k": 25, "lambda_mult": 0.6}
     )
     return retriever.invoke(term)
 
