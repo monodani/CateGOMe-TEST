@@ -105,7 +105,7 @@ def initialize_system():
         # LLM 모델도 캐시
         _llm_model = ChatOpenAI(
             model_name=LLM_MODEL,
-            temperature=0.1,
+            temperature=0.0,
             openai_api_key=OPENAI_API_KEY
         )
 
@@ -239,7 +239,7 @@ def _get_term_info_via_llm(llm: ChatOpenAI, user_query: str, num_related_terms: 
     # 이 함수에서만 gpt-4o 모델 사용
     gpt4o_llm = ChatOpenAI(
         model_name="gpt-4o-mini",  # 여기서 gpt-4o 지정
-        temperature=0.1,
+        temperature=0.0,
         openai_api_key=OPENAI_API_KEY
     )
     
