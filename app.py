@@ -219,12 +219,12 @@ def _keyword_search_on_docs(docs: List[Document], term: str) -> List[Document]:
     return [doc for doc in docs if term.lower() in doc.page_content.lower()]
 
 
-def _similarity_topk_for_term(vs: FAISS, embeddings: OpenAIEmbeddings, term: str, k: int = 3) -> List[Document]:
+def _similarity_topk_for_term(vs: FAISS, embeddings: OpenAIEmbeddings, term: str, k: int = 5) -> List[Document]:
     if vs is None or embeddings is None:  # 초기화 실패 시
         return []
     retriever = vs.as_retriever(
         search_type="mmr",  # MMR 사용 유지
-        search_kwargs={"k": k, "fetch_k": 35, "lambda_mult": 0.70}
+        search_kwargs={"k": k, "fetch_k": 30, "lambda_mult": 0.5}
     )
     return retriever.invoke(term)
 
@@ -330,7 +330,7 @@ def _get_term_info_via_llm(llm: ChatOpenAI, user_query: str, num_related_terms: 
 def search_classification_codes(
     user_query: str,
     all_docs_from_vs: Dict[str, List[Document]],  # 파라미터
-    sim_topk_per_term: int = 3,  # 유사도 검색 결과 개수
+    sim_topk_per_term: int = 5,  # 유사도 검색 결과 개수
     num_related_terms: int = 3  # LLM 관련 용어 개수
 ) -> Dict[str, Any]:
     """
@@ -869,7 +869,7 @@ JSON 스키마:
             progress.progress(30 + int(60 * (i + 1) / total), f"🔍 분류 중... ({i+1}/{total}) - {pname_orig}")
 
             q_single = f"product_name = ['{pname_orig}'], income = [{income_list[i]}], expense = [{expense_list[i]}]"
-            search_output = search_classification_codes(q_single, all_docs_from_vs, sim_topk_per_term=3, num_related_terms=3)
+            search_output = search_classification_codes(q_single, all_docs_from_vs, sim_topk_per_term=5, num_related_terms=3)
             pname = (search_output.get("extracted_terms_info") or [{"term": pname_orig}])[0]["term"]
 
             if "error" in search_output or not search_output["context_docs"]:
